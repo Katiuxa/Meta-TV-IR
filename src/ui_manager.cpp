@@ -374,7 +374,13 @@ static void draw_home() {
         default: tag = "ALL"; break;
     }
     header(tag);
-    const char* labels[5] = {"1  Search", "2  On / Off", "3  Favorites", "4  Brands", "5  Help"};
+    const char* labels[5] = {
+        "1  Search",
+        "2  On / Off (brute force)",
+        "3  Favorites",
+        "4  TV controls & brands",
+        "5  Help",
+    };
     for (int i = 0; i < 5; ++i) {
         int y = 21 + i * 19;
         bool on = i == home_sel;
@@ -856,7 +862,7 @@ static void draw_current() {
         case SCR_REMOTE: draw_remote(); break;
         case SCR_NAME: draw_name(); break;
         case SCR_FAVS: draw_list("FAVS", storage_count(), fav_label, fav_sub, "OK open   Del delete"); break;
-        case SCR_BRANDS: draw_list("BRANDS", here_count(), here_label, here_sub, "OK open   Tab SD"); break;
+        case SCR_BRANDS: draw_list("CONTROLS", here_count(), here_label, here_sub, "OK open   Tab SD"); break;
         case SCR_SD: draw_list("SD", file_n, file_label, nullptr, "OK open   ` back"); break;
         case SCR_SIGS: draw_list("FILE", sig_n, sig_label, sig_sub, "OK test   G save"); break;
         case SCR_HELP: draw_help(); break;
