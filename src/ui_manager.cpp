@@ -58,7 +58,7 @@ static uint32_t auto_at = 0;
 static int last_shot = -1;
 static uint32_t shot_at = 0;
 static int probe = KEY_MUTE;
-static int pad_i = 6;
+static int pad_i = 0;
 static int blast_sel = 0;
 static int blast_arm = 0;
 static bool blast_on = false;
@@ -348,7 +348,7 @@ static void open_catalog(int index) {
     back_to = screen;
     rem_brand = index;
     rem_fav = -1;
-    pad_i = 6;
+    pad_i = 0;
     go(SCR_REMOTE);
 }
 
@@ -358,7 +358,7 @@ static void open_fav(int index) {
     back_to = SCR_FAVS;
     rem_fav = index;
     rem_brand = fav->kind == FAV_CATALOG ? fav->catalog : -1;
-    pad_i = 6;
+    pad_i = fav->kind == FAV_RAW ? 6 : 0;
     go(SCR_REMOTE);
 }
 
@@ -505,8 +505,8 @@ struct Pad {
 };
 
 static const Pad kPad[] = {
-    {KEY_POWER, "P", 8, 40, 34, 16, 0, 0},
-    {KEY_MUTE, "M", 46, 40, 34, 16, 0, 1},
+    {KEY_POWER, "POWER", 8, 40, 50, 16, 0, 0},
+    {KEY_MUTE, "M", 62, 40, 18, 16, 0, 1},
     {KEY_VOL_UP, "+", 84, 40, 34, 16, 0, 2},
     {KEY_VOL_DOWN, "-", 122, 40, 34, 16, 0, 3},
     {KEY_UP, "UP", 84, 58, 34, 14, 1, 1},
@@ -538,7 +538,7 @@ static int pad_at(int row, int col) {
 }
 
 static void move_focus(int drow, int dcol) {
-    if (pad_i < 0 || pad_i >= kPadN) pad_i = 6;
+    if (pad_i < 0 || pad_i >= kPadN) pad_i = 0;
     int row = kPad[pad_i].row;
     int col = kPad[pad_i].col;
     if (dcol) {
@@ -575,16 +575,18 @@ static void draw_remote() {
     text_at(remote_title(), 8, 23, C_INK, &fonts::Font0);
     text_at(remote_proto(), 130, 23, C_CYAN, &fonts::Font0);
     if (!remote_is_raw()) {
-        if (pad_i < 0 || pad_i >= kPadN) pad_i = 6;
+        if (pad_i < 0 || pad_i >= kPadN) pad_i = 0;
         for (int i = 0; i < kPadN; ++i) {
             bool on = i == pad_i;
             bool power = kPad[i].key == KEY_POWER;
             if (on) {
                 fill_r(kPad[i].x, kPad[i].y, kPad[i].w, kPad[i].h, 3, power ? C_POWER : C_AMBER);
-                text_at(kPad[i].label, kPad[i].x + 6, kPad[i].y + 3, C_BG, &fonts::Font0);
             } else {
-                cap(kPad[i].x, kPad[i].y, kPad[i].w, kPad[i].h, kPad[i].label, power ? C_POWER : C_INK, false);
+                fill_r(kPad[i].x, kPad[i].y, kPad[i].w, kPad[i].h, 3, C_CARD);
+                draw_r(kPad[i].x, kPad[i].y, kPad[i].w, kPad[i].h, 3, power ? C_POWER : C_LINE);
             }
+            text_center(kPad[i].label, kPad[i].x + kPad[i].w / 2, kPad[i].y + kPad[i].h / 2,
+                        on ? C_BG : (power ? C_POWER : C_INK), &fonts::Font0);
         }
         text_at("G save", 176, 42, C_DIM, &fonts::Font0);
     } else {
