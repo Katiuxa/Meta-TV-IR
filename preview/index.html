@@ -197,11 +197,11 @@ function drawSweep() {
     if (w > 1) round(6, 72, w, 3, 1, C.cyan);
   }
   keycap(6, 78, "OK", "fire", true, C.amber);
-  keycap(84, 78, "G", "remote", false, C.amber);
-  keycap(162, 78, "S", "save", false, C.amber);
+  keycap(84, 78, "A", autoOn ? "stop" : "auto", autoOn, C.cyan);
+  keycap(162, 78, "G", "remote", false, C.amber);
   keycap(6, 106, "<", "back", false, C.amber);
   keycap(84, 106, ">", "next", false, C.amber);
-  keycap(162, 106, "A", autoOn ? "stop" : "auto", autoOn, C.cyan);
+  keycap(162, 106, "S", "save", false, C.amber);
 }
 function padAt(row, col) {
   let best = 0, bestD = 99;
@@ -502,8 +502,8 @@ function onKey(name) {
 }
 const KEYS = [
   ["1","1"],["2","2"],["3","3"],["4","4"],["5","5 help"],["R","R region"],["Tab","Tab"],
-  ["Enter","OK"],["G","G remote"],["S","S save"],
-  [",","< back"],[".","> next"],["A","A auto"],
+  ["Enter","OK"],["A","A auto"],["G","G remote"],
+  [",","< back"],[".","> next"],["S","S save"],
   ["ArrowLeft","left"],["ArrowRight","right"],["ArrowUp","up"],["ArrowDown","down"],
   ["Escape","back"]
 ];

@@ -11,7 +11,7 @@
 
 static Favorite g_favs[kFavMax];
 static int g_count = 0;
-static bool g_sound = true;
+static bool g_sound = false;
 static uint8_t g_region = 0;
 static bool g_sd = false;
 static bool g_sd_tried = false;
@@ -41,7 +41,7 @@ static void nvs_write() {
     Preferences prefs;
     if (!prefs.begin("irblade", false)) return;
     prefs.putUChar("n", (uint8_t)g_count);
-    prefs.putUChar("snd", g_sound ? 1 : 0);
+    prefs.putUChar("beep", g_sound ? 1 : 0);
     prefs.putUChar("reg", g_region);
     prefs.putBytes("fav", g_favs, sizeof(g_favs));
     prefs.end();
@@ -50,7 +50,7 @@ static void nvs_write() {
 static void nvs_read() {
     Preferences prefs;
     if (!prefs.begin("irblade", true)) return;
-    g_sound = prefs.getUChar("snd", 1) != 0;
+    g_sound = prefs.getUChar("beep", 0) != 0;
     g_region = prefs.getUChar("reg", 0);
     g_count = prefs.getUChar("n", 0);
     if (g_count < 0 || g_count > kFavMax) g_count = 0;

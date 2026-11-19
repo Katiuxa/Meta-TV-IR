@@ -287,7 +287,6 @@ static void go(Screen next) {
     list_sel = 0;
     dirty = true;
     auto_on = false;
-    blip(2100, 16);
 }
 
 static const IrKey* remote_key(int id) {
@@ -427,7 +426,7 @@ static void fire_current() {
     ir_send(kBrands[sweep_i].key[probe]);
     last_shot = sweep_i;
     shot_at = millis();
-    blip(auto_on ? 980 : 1800, 18);
+    if (!auto_on) blip(1800, 18);
     dirty = true;
 }
 
@@ -484,11 +483,11 @@ static void draw_sweep() {
         if (w > 0) fill_r(6, 72, w, 3, 1, C_CYAN);
     }
     keycap(6, 78, "OK", "fire", true, C_AMBER);
-    keycap(84, 78, "G", "remote", false, C_AMBER);
-    keycap(162, 78, "S", "save", false, C_AMBER);
+    keycap(84, 78, "A", auto_on ? "stop" : "auto", auto_on, C_CYAN);
+    keycap(162, 78, "G", "remote", false, C_AMBER);
     keycap(6, 106, "<", "back", false, C_AMBER);
     keycap(84, 106, ">", "next", false, C_AMBER);
-    keycap(162, 106, "A", auto_on ? "stop" : "auto", auto_on, C_CYAN);
+    keycap(162, 106, "S", "save", false, C_AMBER);
     paint_end();
 }
 
@@ -559,7 +558,6 @@ static void move_focus(int drow, int dcol) {
     }
     pad_i = pad_at(row, col);
     dirty = true;
-    blip(2100, 16);
 }
 
 static void focus_key(int key) {
@@ -1160,7 +1158,6 @@ static void move_list(int dir, int count) {
     if (next != list_sel) {
         list_sel = next;
         dirty = true;
-        blip(2100, 14);
     }
 }
 
@@ -1198,7 +1195,6 @@ static void handle_power(const Input& in) {
         blast_sel ^= 1;
         if (blast_on) blast_arm = blast_sel;
         dirty = true;
-        blip(2100, 14);
     }
     if (in.edge && (in.enter || in.space)) {
         if (blast_on) {
@@ -1223,11 +1219,9 @@ static void handle_home(const Input& in) {
     if (in.up) {
         home_sel = (home_sel + 4) % 5;
         dirty = true;
-        blip(2100, 14);
     } else if (in.down) {
         home_sel = (home_sel + 1) % 5;
         dirty = true;
-        blip(2100, 14);
     }
     int pick = -1;
     if (has_char(in, 'r')) {
@@ -1235,7 +1229,6 @@ static void handle_home(const Input& in) {
         list_sel = region_index(storage_region());
         screen = SCR_REGION;
         dirty = true;
-        blip(2100, 14);
         return;
     }
     if (has_char(in, '1')) pick = 0;
@@ -1264,7 +1257,6 @@ static void handle_home(const Input& in) {
         help_top = 0;
         screen = SCR_HELP;
         dirty = true;
-        blip(1500, 14);
     }
 }
 
@@ -1280,26 +1272,22 @@ static void handle_sweep(const Input& in) {
         else probe = KEY_POWER;
         ensure_sweep();
         dirty = true;
-        blip(1500, 16);
     }
     if (in.edge && (in.left || in.up)) {
         auto_on = false;
         int prev = find_probe(sweep_i < 0 ? 0 : sweep_i, -1);
         if (prev >= 0) sweep_i = prev;
         dirty = true;
-        blip(2100, 16);
     } else if (in.edge && (in.right || in.down)) {
         auto_on = false;
         int next = find_probe(sweep_i < 0 ? -1 : sweep_i, 1);
         if (next >= 0) sweep_i = next;
         dirty = true;
-        blip(2100, 16);
     }
     if (in.edge && has_char(in, 'a')) {
         auto_on = !auto_on;
         auto_at = millis();
         dirty = true;
-        blip(1400, 16);
         if (auto_on) fire_current();
     }
     if (in.edge && (in.enter || in.space)) {
@@ -1378,7 +1366,6 @@ static void handle_remote(const Input& in) {
     if (in.esc || in.del) {
         screen = back_to;
         dirty = true;
-        blip(2100, 14);
         return;
     }
     if (remote_is_raw()) {
@@ -1429,7 +1416,6 @@ void ui_begin() {
     canvas_ok = canvas.createSprite(240, 135);
     boot_at = millis();
     dirty = true;
-    blip(1800, 18);
 }
 
 void ui_loop() {
@@ -1458,7 +1444,6 @@ void ui_loop() {
                 screen = SCR_HOME;
                 list_sel = 0;
                 dirty = true;
-                blip(1800, 16);
             }
             break;
         case SCR_HOME: handle_home(in); break;
@@ -1516,7 +1501,6 @@ void ui_loop() {
             if (in.edge && (in.esc || in.del)) {
                 screen = SCR_HOME;
                 dirty = true;
-                blip(2100, 14);
             } else if (in.edge && in.down && help_top + rows < n) {
                 help_top += 4;
                 if (help_top > n - rows) help_top = n - rows;
