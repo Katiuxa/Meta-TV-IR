@@ -1,21 +1,65 @@
-# Meta TV IR
+# META TV IR
 
-Pocket infrared remote for the M5Stack Cardputer ADV. Version 1.0.4.
+**Interactive TV Brand Scanner & Universal Infrared Remote for M5Stack Cardputer ADV.**
 
-Point the Cardputer at the television. Search walks brands until the set reacts, then hands you the remote. On / Off keeps sending power until you stop.
+Point your Cardputer at any unknown TV, sweep through regional brand databases until the screen reacts, lock onto the signal, and take full control—or use continuous brute-force mode to toggle power across nearby sets.
 
-## Device
+---
 
-Cardputer ADV (Stamp-S3A, ESP32-S3, 8 MB flash, no PSRAM). This image is not for the original Cardputer.
+## Key Features
 
-## M5Burner
+* **Interactive Brand Search:** Step through brands manually (`<` / `>`) or trigger **Auto-Sweep (`A`)** to rapidly fire IR bursts across popular brands. The moment the TV reacts, press `A` again to freeze the scan and lock onto that brand.
+* **Region Filtering:** Narrow down the brand database by region before scanning to find matching TVs faster.
+* **Stealth Signal Testing (`Tab`):** Cycle the test trigger between `POWER`, `MUTE`, and `VOL+`—allowing you to identify a TV without turning it off.
+* **Instant Full Remote (`G`):** Once locked onto a brand, press `G` to open a complete remote control interface.
+* **Favorites (`S`):** Save detected TVs for quick access later.
+* **ON / OFF Brute-Force Mode:** Continuously spams power signals across brands until you manually stop it.
+* **Silent by Default:** Audio feedback is muted on boot (`Ctrl+M` to toggle sound).
 
-Choose `firmware/MetaTVIR-1.0.4.bin`. It is the application image (ESP32 magic `E9`), version **1.0.4**, device **Cardputer ADV**. Sound is off until turned on with Ctrl+M. The remote opens with POWER marked.
+---
 
-## Build
+## Controls
 
-```
+| Key | Action |
+| :--- | :--- |
+| `<` / `>` | Previous / Next brand |
+| `OK` | Fire current test signal (`POWER` selected by default) |
+| `A` | Start / Freeze Auto-Sweep |
+| `Tab` | Switch test signal (`POWER` -> `MUTE` -> `VOL+`) |
+| `G` | Open full TV remote for the selected brand |
+| `S` | Save brand to Favorites |
+| `R` | Change Region filter |
+| `Ctrl+M` | Toggle sound on/off |
+
+---
+
+## Hardware Compatibility
+
+* **Supported:** **M5Stack Cardputer ADV** (Stamp-S3A, ESP32-S3, 8 MB Flash, no PSRAM).
+* **Not Supported:** Original M5Stack Cardputer (v1.0 / v1.1).
+
+---
+
+## Installation (M5Burner)
+
+1. Open **M5Burner** and select **Cardputer ADV**.
+2. Search for **META TV IR** (or load `firmware/MetaTVIR-1.0.4.bin`, application image / ESP32 magic `E9`).
+3. Flash version **1.0.4** to your device.
+
+*(Also compatible with **M5Launcher** via microSD).*
+
+---
+
+## Build from Source
+
+Built with **PlatformIO**:
+
+```bash
 pio run -e cardputer-adv
 ```
 
-The image is `.pio/build/cardputer-adv/firmware.bin`.
+The compiled binary is generated at:
+
+```text
+.pio/build/cardputer-adv/firmware.bin
+```
