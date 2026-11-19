@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Meta TV IR — vista local</title>
+<style>
+  :root { color-scheme: dark; }
+  body {
+    margin: 0; min-height: 100vh; display: grid; place-items: center;
+    background: #141418; color: #f4f4f2;
+    font-family: "Segoe UI", sans-serif;
+  }
+  main { width: min(920px, 96vw); }
+  h1 { font-size: 15px; font-weight: 600; letter-spacing: .08em; margin: 0 0 4px; color: #ff6b00; }
+  p.lead { margin: 0 0 16px; color: #a0a0aa; font-size: 13px; line-height: 1.45; }
+  .device {
+    background: #1c1c22; border-radius: 22px; padding: 18px 18px 14px;
+    box-shadow: 0 18px 50px rgba(0,0,0,.35);
+  }
+  .ir {
+    width: 46px; height: 8px; margin: 0 auto 10px; border-radius: 4px;
+    background: #3a3a44; position: relative;
+  }
+  .ir::after {
+    content: "IR"; position: absolute; left: 54px; top: -4px;
+    font-size: 10px; color: #8e8e99; letter-spacing: .12em;
+  }
+  canvas {
+    width: 100%; height: auto; background: #0b0b0e; border-radius: 6px; display: block;
+    image-rendering: auto;
+  }
+  .keys { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  button.key {
+    background: #2a2a32; color: #f4f4f2; border: 0; border-radius: 8px;
+    padding: 8px 10px; font: 12px/1 "Segoe UI", sans-serif; cursor: pointer;
+  }
+  button.key.hot { background: #ff6b00; color: #0b0b0e; font-weight: 700; }
+  button.key:active { transform: translateY(1px); }
+  .log { margin-top: 10px; min-height: 18px; color: #00d4ff; font-size: 13px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>META TV IR</h1>
+  <p class="lead">Tras la región, el menú tiene cinco opciones. Help explica la búsqueda manual, el automático y On / Off.</p>
+  <div class="device">
+    <div class="ir"></div>
+    <canvas id="lcd" width="240" height="135"></canvas>
+    <div class="keys" id="keys"></div>
+    <div class="log" id="log">Apunta el IR (arriba) hacia la tele.</div>
+  </div>
+</main>
+<script>
+const BRANDS = [["LG","NEC",31],["Samsung","SAMSUNG",31],["Sony","SIRC",31],["Philips","RC6",31],["Hisense","NEC",31],["TCL","RCA",31],["Panasonic","KASEIKYO",31],["Toshiba","NEC",31],["Sharp","NEC",31],["Grundig","RC5",1],["JVC","JVC",31],["Hitachi","RC5",31],["Nevir","NEC",1],["Telefunken","RC5",1],["Sanyo","NEC",31],["AWA","NEC",16],["Bush","NEC",1],["Dynex","NEC",4],["Emerson","NEC",4],["RCA","NEC",4],["Sharp 3","SHARP",31],["Sony 3","SIRC",31]];
+const PROBES = ["POWER","MUTE","VOL+"];
+const REGIONS = ["Europe","Asia","Americas","Japan","Oceania","All"];
+const REGION_TAG = ["EUROPE","ASIA","AMERICAS","JAPAN","OCEANIA","ALL"];
+const REGION_BIT = [1,2,4,8,16,31];
+const PAD = [
+  {key:"P", x:8, y:40, w:34, h:16, row:0, col:0},
+  {key:"M", x:46, y:40, w:34, h:16, row:0, col:1},
+  {key:"+", x:84, y:40, w:34, h:16, row:0, col:2},
+  {key:"-", x:122, y:40, w:34, h:16, row:0, col:3},
+  {key:"UP", x:84, y:58, w:34, h:14, row:1, col:1},
+  {key:"L", x:46, y:74, w:34, h:14, row:2, col:0},
+  {key:"OK", x:84, y:74, w:34, h:14, row:2, col:1},
+  {key:"R", x:122, y:74, w:34, h:14, row:2, col:2},
+  {key:"DN", x:84, y:88, w:34, h:14, row:3, col:1},
+  {key:"CH+", x:8, y:104, w:36, h:14, row:4, col:0},
+  {key:"CH-", x:48, y:104, w:36, h:14, row:4, col:1},
+  {key:"SRC", x:88, y:104, w:36, h:14, row:4, col:2},
+  {key:"MENU", x:128, y:104, w:42, h:14, row:4, col:3},
+  {key:"BACK", x:174, y:104, w:42, h:14, row:4, col:4}
+];
+const C = {bg:"#0B0B0E", card:"#18181F", ink:"#F4F4F2", dim:"#8E8E99", amber:"#FF6B00", cyan:"#00D4FF", line:"#2A2A34", power:"#FF4D1A"};
+const ctx = document.getElementById("lcd").getContext("2d");
+const log = document.getElementById("log");
+let screen = "boot", homeSel = 0, listSel = 0, sweep = 0, probe = 0, powerSweep = false;
+let bootAt = performance.now(), region = 5, regionFromHome = false;
+let autoOn = false, autoAt = 0, shotAt = 0, note = "", noteUntil = 0, padI = 6;
+const favs = [];
+
+function gap() { return 450; }
+function setNote(t) { note = t; noteUntil = performance.now() + 900; }
+function say(t) { log.textContent = t; }
+function round(x,y,w,h,r, fill, stroke) {
+  ctx.beginPath();
+  ctx.roundRect(x,y,w,h,r);
+  if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+  if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 1; ctx.stroke(); }
+}
+function ell(x,y,rx,ry, fill, stroke) {
+  ctx.beginPath(); ctx.ellipse(x,y,rx,ry,0,0,Math.PI*2);
+  if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+  if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 1.5; ctx.stroke(); }
+}
+function text(s,x,y,color,size, align) {
+  ctx.fillStyle = color; ctx.font = `${size}px sans-serif`; ctx.textAlign = align || "left"; ctx.textBaseline = "top";
+  ctx.fillText(s,x,y);
+}
+function center(s,x,y,color,size) {
+  ctx.fillStyle = color; ctx.font = `${size}px sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText(s,x,y);
+}
+function ticks() {
+  ctx.strokeStyle = C.cyan; ctx.lineWidth = 1;
+  const segs = [[0,0,6,0],[0,0,0,6],[234,0,240,0],[239,0,239,6],[0,134,6,134],[0,129,0,135],[234,134,240,134],[239,129,239,135]];
+  segs.forEach(([x0,y0,x1,y1]) => { ctx.beginPath(); ctx.moveTo(x0,y0); ctx.lineTo(x1,y1); ctx.stroke(); });
+}
+function brackets(x,y,w,h,color) {
+  const a = 8;
+  ctx.strokeStyle = color; ctx.lineWidth = 1;
+  [[x,y,x+a,y],[x,y,x,y+a],[x+w-a,y,x+w,y],[x+w,y,x+w,y+a],[x,y+h,x+a,y+h],[x,y+h-a,x,y+h],[x+w-a,y+h,x+w,y+h],[x+w,y+h-a,x+w,y+h]]
+    .forEach(([x0,y0,x1,y1]) => { ctx.beginPath(); ctx.moveTo(x0,y0); ctx.lineTo(x1,y1); ctx.stroke(); });
+}
+function header(mode) {
+  ticks();
+  text("META TV IR", 8, 2, C.amber, 13);
+  if (mode) text(mode, 118, 6, C.cyan, 10);
+  text("87%", 204, 6, C.cyan, 10);
+  ctx.fillStyle = C.line; ctx.fillRect(0,20,240,1);
+}
+function footer(hint) {
+  const shown = (note && performance.now() < noteUntil) ? note : hint;
+  text(shown, 8, 122, C.dim, 10);
+}
+function chip(x, label, on, fill) {
+  round(x, 22, 46, 14, 7, on ? fill : C.card, on ? fill : C.line);
+  text(label, x + 6, 24, on ? C.bg : C.dim, 10);
+}
+function keycap(x, y, key, action, hot, fill) {
+  round(x, y, 74, 26, 4, hot ? fill : C.card, hot ? fill : C.line);
+  text(key, x + 6, y + 6, hot ? C.bg : C.amber, key.length > 1 ? 11 : 14);
+  text(action, x + 26, y + 8, hot ? C.bg : C.ink, 10);
+}
+function here() {
+  const bit = REGION_BIT[region];
+  if (bit === 31) return BRANDS;
+  return BRANDS.filter(b => (b[2] & bit) !== 0);
+}
+function drawBoot() {
+  ctx.fillStyle = C.bg; ctx.fillRect(0,0,240,135);
+  header("");
+  round(78, 36, 84, 56, 4, null, C.cyan);
+  round(85, 43, 70, 34, 2, C.card);
+  const sx = 89 + ((performance.now() - bootAt) % 900) * 62 / 900;
+  ctx.fillStyle = C.amber; ctx.fillRect(sx, 46, 1, 28);
+  round(112, 82, 16, 4, 1, C.dim);
+  round(102, 86, 36, 3, 1, C.line);
+  center("Meta TV", 120, 112, C.dim, 10);
+}
+function drawRegion() {
+  ctx.fillStyle = C.bg; ctx.fillRect(0,0,240,135);
+  header("REGION");
+  const start = Math.max(0, Math.min(listSel - 1, REGIONS.length - 4));
+  for (let r = 0; r < 4; r++) {
+    const i = start + r, y = 24 + r * 23, on = i === listSel;
+    round(8, y, 224, 21, 3, C.card, on ? C.amber : C.line);
+    text(REGIONS[i], 18, y + 3, on ? C.amber : C.ink, 14);
+  }
+  footer("OK");
+}
+function drawHome() {
+  ctx.fillStyle = C.bg; ctx.fillRect(0,0,240,135);
+  header(REGION_TAG[region]);
+  ["1  Search","2  On / Off","3  Favorites","4  Brands","5  Help"].forEach((label,i) => {
+    const y = 21 + i * 19, on = i === homeSel;
+    round(8,y,224,18,3, C.card, on ? C.amber : C.line);
+    if (on) { ctx.fillStyle = C.amber; ctx.fillRect(8, y+2, 2, 14); }
+    text(label, 18, y+2, on ? C.amber : C.ink, 12);
+  });
+  footer("OK open    R region");
+}
+function drawSweep() {
+  ctx.fillStyle = C.bg; ctx.fillRect(0,0,240,135);
+  header("SEARCH");
+  chip(8, "POWER", probe === 0, C.power);
+  chip(58, "MUTE", probe === 1, C.amber);
+  chip(108, "VOL+", probe === 2, C.amber);
+  text("Tab", 158, 24, C.dim, 10);
+  const hot = performance.now() - shotAt < 160;
+  brackets(12, 40, 216, 30, hot ? C.power : C.cyan);
+  ell(120, 54, 100, 15, C.card, hot ? C.power : C.amber);
+  if (autoOn) {
+    const sx = 18 + ((performance.now() / 14) % 188);
+    ctx.fillStyle = C.cyan; ctx.fillRect(sx, 40, 12, 1);
+  }
+  center(BRANDS[sweep][0], 120, 50, C.ink, 14);
+  const sub = (note && performance.now() < noteUntil) ? note : (PROBES[probe] + "  ·  " + BRANDS[sweep][1]);
+  center(sub, 120, 64, hot ? C.power : C.cyan, 10);
+  if (autoOn) {
+    const g = gap();
+    const gone = Math.min(g, performance.now() - autoAt);
+    const w = Math.max(0, (228 * (g - gone)) / g);
+    round(6, 72, 228, 3, 1, C.line);
+    if (w > 1) round(6, 72, w, 3, 1, C.cyan);
+  }
+  keycap(6, 78, "OK", "fire", true, C.amber);
+  keycap(84, 78, "G", "remote", false, C.amber);
+  keycap(162, 78, "S", "save", false, C.amber);
+  keycap(6, 106, "<", "back", false, C.amber);
+  keycap(84, 106, ">", "next", false, C.amber);
+  keycap(162, 106, "A", autoOn ? "stop" : "auto", autoOn, C.cyan);
+}
+function padAt(row, col) {
+  let best = 0, bestD = 99;
+  PAD.forEach((p,i) => {
+    if (p.row !== row) return;
+    const d = Math.abs(p.col - col);
+    if (d < bestD) { bestD = d; best = i; }
+  });
+  return best;
+}
+function moveFocus(drow, dcol) {
+  let row = PAD[padI].row, col = PAD[padI].col;
+  if (dcol) {
+    const cols = PAD.filter(p => p.row === row).map(p => p.col);
+    let at = cols.indexOf(col); if (at < 0) at = 0;
+    col = cols[(at + dcol + cols.length) % cols.length];
+  }
+  if (drow) { row += drow; if (row < 0) row = 4; if (row > 4) row = 0; }
+  padI = padAt(row, col);
+}
+function focusKey(label) {
+  const i = PAD.findIndex(p => p.key === label);
+  if (i >= 0) padI = i;
+}
+function drawRemote() {
+  ctx.fillStyle = C.bg; ctx.fillRect(0,0,240,135);
+  header("REMOTE");
+  text(BRANDS[sweep][0], 8, 23, C.ink, 10);
+  text(BRANDS[sweep][1], 130, 23, C.cyan, 10);
+  PAD.forEach((p,i) => {
+    const on = i === padI;
+    const power = p.key === "P";
+    round(p.x, p.y, p.w, p.h, 3, on ? (power ? C.power : C.amber) : C.card, on ? null : C.line);
+    text(p.key, p.x + 6, p.y + 2, on ? C.bg : (power ? C.power : C.ink), 10);
+  });
+  text("G save", 176, 42, C.dim, 10);
+  footer("OK sends    ` back");
+}
+function drawList(title, rows, hint) {
+  ctx.fillStyle = C.bg; ctx.fillRect(0,0,240,135);
+  header(title);
+  if (!rows.length) text("Empty", 8, 48, C.dim, 16);
+  else {
+    const start = Math.max(0, Math.min(listSel - 1, rows.length - 4));
+    for (let r = 0; r < 4 && start + r < rows.length; r++) {
+      const i = start + r, y = 24 + r * 22, on = i === listSel;
+      round(8,y,224,20,3,C.card, on ? C.amber : C.line);
+      text(rows[i], 14, y+4, on ? C.amber : C.ink, 11);
+    }
+  }
+  footer(hint);
+}
+const CODES = ["20DF10EF","E0E040BF","A90","0C","E0E019E6","20DF40BF","C1AA09F6","01FE48B7","807F02FD","5EA1F807","4BB4E21D","BF00FC03","E0E0F807","20DF906F","A55A","0E","10EF20DF","E0E0D02F","40BF","F708FB04","20DFC03F","E0E012ED","02FD","7E81","20DF12ED","E0E0E01F","A50","14","C1AA19E6","807F48B7","5EA1F807","4BB620DF","E0E0A05F","20DFA05F","02FD40BF","A10","18","C1AA59A6","807F22DD","E0E0B44B"];
+let pSel = 0, pArm = 0, pRun = false, pI = 0, pAt = 0;
+let pLog = [];
+function drawPower() {
+  ctx.fillStyle = C.bg; ctx.fillRect(0,0,240,135);
+  header("POWER");
+  if (pRun && pLog.length) center(pLog[pLog.length - 1], 120, 32, C.power, 11);
+  brackets(8, 40, 224, 48, pRun ? C.power : C.cyan);
+  ["ON","OFF"].forEach((lab,i) => {
+    const x = 16 + i * 108;
+    const armed = pRun && i === pArm;
+    const sel = i === pSel;
+    round(x, 46, 100, 36, 8, armed ? C.power : C.card, armed ? C.power : (sel ? C.amber : C.line));
+    center(lab, x + 50, 64, armed ? C.bg : (sel ? C.amber : C.ink), 16);
+  });
+  if (pRun) {
+    round(16, 92, 208, 22, 6, C.power);
+    text("OK", 28, 97, C.bg, 11);
+    center("STOP", 128, 103, C.bg, 14);
+  }
+  footer("` back");
+}
+const HELP = [
+  'HOW TO HUNT UNKNOWN TVs',
+  '',
+  '1. FILTER BY REGION',
+  '',
+  'Pick your region first',
+  '(or ALL) to narrow down',
+  'the brand list and find',
+  'the TV faster.',
+  '',
+  '2. SEARCH & LOCK-ON',
+  '',
+  'Test signal [Tab]:',
+  'Switch between POWER,',
+  'MUTE, or VOL+.',
+  'Tip: use MUTE or VOL+',
+  'to test a TV without',
+  'turning it off.',
+  '',
+  'Manual mode [< / >]:',
+  'Step through brands',
+  'one by one. [OK] fires',
+  'the signal.',
+  '',
+  'Auto sweep [A]:',
+  'Cycles brands for you.',
+  'Watch the TV. The second',
+  'it reacts, press [A]',
+  'again to FREEZE on that',
+  'brand. Use [< / >] and',
+  '[OK] to double-check.',
+  '',
+  '3. TAKE CONTROL & SAVE',
+  '',
+  'Once locked on, press',
+  '[G] to open the full',
+  'TV remote.',
+  '',
+  'Press [S] anytime to',
+  'save the brand to your',
+  'favorites.',
+  '',
+  '4. ON / OFF (BRUTE FORCE)',
+  '',
+  'Pick ON or OFF. [OK]',
+  'spams power codes across',
+  'all brands, nonstop.',
+  'Press [OK] again to',
+  'abort.'
+];
+let helpTop = 0;
+function helpHeading(line) {
+  return line.length > 0 && ![...line].some(ch => ch >= "a" && ch <= "z");
+}
+function drawHelp() {
+  ctx.fillStyle = C.bg; ctx.fillRect(0,0,240,135);
+  header("HELP");
+  const rows = 8;
+  if (helpTop > HELP.length - rows) helpTop = Math.max(0, HELP.length - rows);
+  for (let i = 0; i < rows && helpTop + i < HELP.length; i++) {
+    const line = HELP[helpTop + i];
+    if (line) text(line, 10, 24 + i * 12, helpHeading(line) ? C.amber : C.ink, 10);
+  }
+  if (HELP.length > rows) {
+    const track = rows * 12 - 4;
+    ctx.fillStyle = C.line; ctx.fillRect(230, 24, 1, track);
+    const y = 24 + (helpTop * (track - 10)) / Math.max(1, HELP.length - rows);
+    round(228, y, 3, 10, 1, C.amber);
+  }
+  footer(helpTop + rows < HELP.length ? "` back     down" : "` back");
+}
+function draw() {
+  if (screen === "help") drawHelp();
+  else if (screen === "boot") drawBoot();
+  else if (screen === "region") drawRegion();
+  else if (screen === "home") drawHome();
+  else if (screen === "sweep") drawSweep();
+  else if (screen === "power") drawPower();
+  else if (screen === "remote") drawRemote();
+  else if (screen === "favs") drawList("FAVS", favs, "OK open   Del delete");
+  else drawList("BRANDS", here().map(b => b[0] + "   " + b[1]), "OK open   Tab SD");
+}
+function fire() {
+  shotAt = performance.now();
+  const what = PROBES[probe];
+  say("Fired " + what + "  ·  " + BRANDS[sweep][0]);
+}
+function moveBrand(dir) {
+  autoOn = false;
+  const list = here();
+  if (!list.length) return;
+  let at = list.findIndex(b => b === BRANDS[sweep]);
+  if (at < 0) at = 0;
+  const next = list[(at + dir + list.length) % list.length];
+  sweep = BRANDS.indexOf(next);
+}
+function openSweep() {
+  probe = 0;
+  autoOn = false;
+  const list = here();
+  if (list.length) sweep = BRANDS.indexOf(list[0]);
+  screen = "sweep";
+  say("Search starts on POWER. OK fires. Arrows change brand.");
+}
+function openPower() {
+  pRun = false;
+  pI = 0;
+  pLog = [];
+  screen = "power";
+  say("ON / OFF. It keeps looping.");
+}
+function onKey(name) {
+  if (note && performance.now() > noteUntil) note = "";
+  if (screen === "help") {
+    const rows = 8;
+    if (name === "Escape" || name === "Backspace" || name === "`") {
+      screen = "home"; say("Home"); return;
+    }
+    if ((name === "ArrowDown" || name === ".") && helpTop + rows < HELP.length) {
+      helpTop = Math.min(HELP.length - rows, helpTop + 4);
+    }
+    if ((name === "ArrowUp" || name === ";") && helpTop > 0) helpTop = Math.max(0, helpTop - 4);
+    return;
+  }
+  if (screen === "boot") {
+    listSel = region;
+    regionFromHome = false;
+    screen = "region";
+    return;
+  }
+  if (screen === "region") {
+    if ((name === "Escape" || name === "Backspace" || name === "`") && regionFromHome) {
+      screen = "home"; say("Home"); return;
+    }
+    if (name === "ArrowUp" || name === ";") { listSel = (listSel + 5) % 6; return; }
+    if (name === "ArrowDown" || name === ".") { listSel = (listSel + 1) % 6; return; }
+    if (name === "Enter" || name === " ") {
+      region = listSel;
+      screen = "home";
+      say(REGIONS[region]);
+    }
+    return;
+  }
+  if (name === "Tab") {
+    if (screen === "sweep") probe = (probe + 1) % 3;
+    return;
+  }
+  if (screen === "home") {
+    if (name === "r" || name === "R") {
+      regionFromHome = true;
+      listSel = region;
+      screen = "region";
+      return;
+    }
+    if (name === "ArrowUp" || name === ";") { homeSel = (homeSel + 4) % 5; return; }
+    if (name === "ArrowDown" || name === ".") { homeSel = (homeSel + 1) % 5; return; }
+    let pick = -1;
+    if (name === "1") pick = 0;
+    if (name === "2") pick = 1;
+    if (name === "3") pick = 2;
+    if (name === "4") pick = 3;
+    if (name === "5") pick = 4;
+    if (name === "Enter") pick = homeSel;
+    if (pick < 0) return;
+    if (pick === 0) openSweep();
+    else if (pick === 1) openPower();
+    else if (pick === 4) { helpTop = 0; screen = "help"; say("Help. Down to read."); }
+    else { screen = pick === 2 ? "favs" : "brands"; listSel = 0; say("List"); }
+    return;
+  }
+  if (name === "Escape" || name === "Backspace" || name === "`") {
+    autoOn = false; pRun = false; screen = "home"; say("Home"); return;
+  }
+  if (screen === "power") {
+    if (name === "ArrowLeft" || name === "ArrowRight" || name === "ArrowUp" || name === "ArrowDown" || name === "," || name === "." || name === ";" || name === "/") {
+      pSel ^= 1; return;
+    }
+    if (name === "Enter" || name === " ") {
+      if (pRun) { pRun = false; say("Stopped"); return; }
+      pArm = pSel; pI = 0; pLog = []; pRun = true; pAt = performance.now();
+      say(pSel ? "OFF" : "ON");
+      return;
+    }
+    return;
+  }
+  if (screen === "sweep") {
+    if (name === "ArrowLeft" || name === "ArrowUp" || name === "," || name === ";") moveBrand(-1);
+    else if (name === "ArrowRight" || name === "ArrowDown" || name === "." || name === "/") moveBrand(1);
+    else if (name === "a" || name === "A") {
+      autoOn = !autoOn; autoAt = performance.now();
+      if (autoOn) fire();
+      say(autoOn ? "Auto every " + (gap()/1000) + "s. Arrows stop it." : "Auto stopped");
+    }
+    else if (name === "Enter" || name === " ") { autoOn = false; fire(); }
+    else if (name === "g" || name === "G") { autoOn = false; padI = 6; screen = "remote"; say("Remote · " + BRANDS[sweep][0] + ". Arrows move, OK sends."); }
+    else if (name === "s" || name === "S") {
+      autoOn = false;
+      if (!favs.includes(BRANDS[sweep][0])) favs.push(BRANDS[sweep][0]);
+      setNote("Saved");
+      say("Saved " + BRANDS[sweep][0]);
+    }
+    return;
+  }
+  if (screen === "remote") {
+    if (name === "ArrowUp" || name === ";") { moveFocus(-1, 0); return; }
+    if (name === "ArrowDown" || name === ".") { moveFocus(1, 0); return; }
+    if (name === "ArrowLeft" || name === ",") { moveFocus(0, -1); return; }
+    if (name === "ArrowRight" || name === "/") { moveFocus(0, 1); return; }
+    if (name === "Enter" || name === " ") { say("Sent " + PAD[padI].key + "  ·  " + BRANDS[sweep][0]); return; }
+    const map = {p:"P", P:"P", m:"M", M:"M", "+":"+", "-":"-", n:"CH+", N:"CH+", b:"CH-", B:"CH-", s:"SRC", S:"SRC", h:"MENU", H:"MENU", x:"BACK", X:"BACK"};
+    if (map[name]) { focusKey(map[name]); say("Sent " + map[name] + "  ·  " + BRANDS[sweep][0]); return; }
+    if (name === "g" || name === "G") { setNote("Saved"); say("Saved " + BRANDS[sweep][0]); }
+    return;
+  }
+  const rows = screen === "favs" ? favs : here();
+  if (name === "ArrowUp" || name === ";") listSel = (listSel - 1 + Math.max(rows.length,1)) % Math.max(rows.length,1);
+  else if (name === "ArrowDown" || name === ".") listSel = (listSel + 1) % Math.max(rows.length,1);
+  else if (name === "Enter" && rows.length) {
+    if (screen === "brands") {
+      sweep = BRANDS.indexOf(rows[listSel]);
+      padI = 6; screen = "remote"; say("Remote · " + BRANDS[sweep][0]);
+    }
+  }
+}
+const KEYS = [
+  ["1","1"],["2","2"],["3","3"],["4","4"],["5","5 help"],["R","R region"],["Tab","Tab"],
+  ["Enter","OK"],["G","G remote"],["S","S save"],
+  [",","< back"],[".","> next"],["A","A auto"],
+  ["ArrowLeft","left"],["ArrowRight","right"],["ArrowUp","up"],["ArrowDown","down"],
+  ["Escape","back"]
+];
+const box = document.getElementById("keys");
+KEYS.forEach(([code, label]) => {
+  const b = document.createElement("button");
+  b.className = "key" + (code === "Enter" ? " hot" : "");
+  b.textContent = label;
+  b.onclick = () => onKey(code);
+  box.appendChild(b);
+});
+window.addEventListener("keydown", (e) => {
+  const k = e.key;
+  if (["Tab"," ","ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].includes(k)) e.preventDefault();
+  onKey(k.length === 1 ? k : k);
+});
+function frame() {
+  if (screen === "boot" && performance.now() - bootAt >= 2600) {
+    listSel = region;
+    regionFromHome = false;
+    screen = "region";
+  }
+  if (pRun && screen === "power" && performance.now() - pAt >= 70) {
+    pAt = performance.now();
+    pLog.push(CODES[pI % CODES.length]);
+    if (pLog.length > 6) pLog.shift();
+    pI++;
+  }
+  if (autoOn && screen === "sweep" && performance.now() - autoAt >= gap()) {
+    autoAt = performance.now();
+    moveBrand(1);
+    autoOn = true;
+    fire();
+  }
+  draw();
+  requestAnimationFrame(frame);
+}
+frame();
+</script>
+</body>
+</html>
