@@ -3,6 +3,7 @@
 #include <M5Cardputer.h>
 #include <SD.h>
 
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -193,6 +194,21 @@ static void vline(int x, int y, int h, uint16_t color) {
     else M5Cardputer.Display.drawFastVLine(x, y, h, color);
 }
 
+static void line(int x0, int y0, int x1, int y1, uint16_t color) {
+    if (canvas_ok) canvas.drawLine(x0, y0, x1, y1, color);
+    else M5Cardputer.Display.drawLine(x0, y0, x1, y1, color);
+}
+
+static void fill_tri(int x0, int y0, int x1, int y1, int x2, int y2, uint16_t color) {
+    if (canvas_ok) canvas.fillTriangle(x0, y0, x1, y1, x2, y2, color);
+    else M5Cardputer.Display.fillTriangle(x0, y0, x1, y1, x2, y2, color);
+}
+
+static void plot(int x, int y, uint16_t color) {
+    if (canvas_ok) canvas.drawPixel(x, y, color);
+    else M5Cardputer.Display.drawPixel(x, y, color);
+}
+
 static void brackets(int x, int y, int w, int h, uint16_t color) {
     const int a = 8;
     hline(x, y, a, color);
@@ -362,6 +378,64 @@ static void open_fav(int index) {
     go(SCR_REMOTE);
 }
 
+static void icon_ring(int cx, int cy, int r, int gap0, int gap1, uint16_t color) {
+    for (int d = 0; d < 360; d += 3) {
+        if (d > gap0 && d < gap1) continue;
+        float rad = d * 0.0174533f;
+        plot(cx + (int)lroundf(cosf(rad) * r), cy + (int)lroundf(sinf(rad) * r), color);
+    }
+}
+
+static void draw_home_icon(int id, int cx, int cy, bool big, uint16_t color) {
+    if (id == 0) {
+        int r = big ? 9 : 6;
+        draw_ellipse(cx - 2, cy - 2, r, r, color);
+        if (big) draw_ellipse(cx - 2, cy - 2, r - 1, r - 1, color);
+        line(cx + r / 2, cy + r / 2, cx + r + 4, cy + r + 4, color);
+        if (big) line(cx + r / 2 + 1, cy + r / 2, cx + r + 5, cy + r + 4, color);
+    } else if (id == 1) {
+        int r = big ? 12 : 7;
+        icon_ring(cx, cy + 1, r, 255, 285, color);
+        if (big) icon_ring(cx, cy + 1, r - 1, 255, 285, color);
+        int stem = big ? 13 : 8;
+        vline(cx, cy - r, stem, color);
+        if (big) vline(cx - 1, cy - r, stem, color);
+    } else if (id == 2) {
+        int r = big ? 12 : 7;
+        int ox[5], oy[5], ix[5], iy[5];
+        for (int i = 0; i < 5; ++i) {
+            float a = -1.5708f + i * 1.25664f;
+            float b = a + 0.62832f;
+            ox[i] = cx + (int)lroundf(cosf(a) * r);
+            oy[i] = cy + (int)lroundf(sinf(a) * r);
+            ix[i] = cx + (int)lroundf(cosf(b) * (r * 0.42f));
+            iy[i] = cy + (int)lroundf(sinf(b) * (r * 0.42f));
+        }
+        for (int i = 0; i < 5; ++i) {
+            int n = (i + 1) % 5;
+            fill_tri(ox[i], oy[i], ix[i], iy[i], cx, cy, color);
+            fill_tri(ix[i], iy[i], ox[n], oy[n], cx, cy, color);
+        }
+    } else if (id == 3) {
+        int w = big ? 16 : 10;
+        int h = big ? 28 : 18;
+        int x = cx - w / 2;
+        int y = cy - h / 2 + 1;
+        draw_r(x, y, w, h, 3, color);
+        fill_ellipse(cx, y + (big ? 5 : 3), big ? 2 : 1, big ? 2 : 1, color);
+        int m = cy + (big ? 3 : 2);
+        int arm = big ? 4 : 2;
+        hline(cx - arm, m, arm * 2 + 1, color);
+        vline(cx, m - arm, arm * 2 + 1, color);
+    } else {
+        int r = big ? 12 : 7;
+        draw_ellipse(cx, cy, r, r, color);
+        const lgfx::IFont* mark = big ? static_cast<const lgfx::IFont*>(&fonts::Font2)
+                                     : static_cast<const lgfx::IFont*>(&fonts::Font0);
+        text_center("?", cx, cy + 1, color, mark);
+    }
+}
+
 static void draw_home() {
     paint_begin();
     const char* tag = "ALL";
@@ -374,22 +448,32 @@ static void draw_home() {
         default: tag = "ALL"; break;
     }
     header(tag);
-    const char* labels[5] = {
-        "1  Search",
-        "2  On / Off (brute force)",
-        "3  Favorites",
-        "4  TV controls & brands",
-        "5  Help",
-    };
-    for (int i = 0; i < 5; ++i) {
-        int y = 21 + i * 19;
-        bool on = i == home_sel;
-        fill_r(8, y, 224, 18, 3, C_CARD);
-        draw_r(8, y, 224, 18, 3, on ? C_AMBER : C_LINE);
-        if (on) vline(8, y + 2, 14, C_AMBER);
-        text_at(labels[i], 18, y + 1, on ? C_AMBER : C_INK, &fonts::Font2);
-    }
-    footer("OK open    R region");
+    static const char* title[] = {"SEARCH", "ON / OFF", "FAVORITES", "CONTROLS", "HELP"};
+    static const char* sub[] = {"FIND THE SET", "BRUTE FORCE", "SAVED SETS", "BY BRAND", "HOW TO HUNT"};
+    static const char* side[] = {"SEARCH", "ON/OFF", "SAVED", "BRANDS", "HELP"};
+    int prev = (home_sel + 4) % 5;
+    int next = (home_sel + 1) % 5;
+
+    fill_r(4, 36, 46, 70, 4, C_CARD);
+    draw_r(4, 36, 46, 70, 4, C_LINE);
+    draw_home_icon(prev, 27, 64, false, C_DIM);
+    text_center(side[prev], 27, 94, C_DIM, &fonts::Font0);
+
+    fill_r(190, 36, 46, 70, 4, C_CARD);
+    draw_r(190, 36, 46, 70, 4, C_LINE);
+    draw_home_icon(next, 213, 64, false, C_DIM);
+    text_center(side[next], 213, 94, C_DIM, &fonts::Font0);
+
+    fill_r(54, 24, 132, 92, 5, C_CARD);
+    draw_r(54, 24, 132, 92, 5, C_AMBER);
+    brackets(58, 28, 124, 84, C_CYAN);
+    uint16_t ink = home_sel == 1 ? C_POWER : C_AMBER;
+    draw_home_icon(home_sel, 120, 50, true, ink);
+    text_center(title[home_sel], 120, 80, C_INK, &fonts::Font2);
+    text_center(sub[home_sel], 120, 98, ink, &fonts::Font0);
+    static const char* nums[] = {"1", "2", "3", "4", "5"};
+    text_at(nums[home_sel], 64, 32, C_CYAN, &fonts::Font0);
+    footer("< > move    OK open    R");
     paint_end();
 }
 
@@ -1224,10 +1308,10 @@ static void handle_power(const Input& in) {
 
 static void handle_home(const Input& in) {
     if (!in.edge) return;
-    if (in.up) {
+    if (in.left || in.up) {
         home_sel = (home_sel + 4) % 5;
         dirty = true;
-    } else if (in.down) {
+    } else if (in.right || in.down) {
         home_sel = (home_sel + 1) % 5;
         dirty = true;
     }

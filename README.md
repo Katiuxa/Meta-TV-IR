@@ -1,6 +1,6 @@
 # Meta TV IR
 
-Pocket infrared remote for the M5Stack Cardputer ADV. Version 1.0.3.
+Pocket infrared remote for the M5Stack Cardputer ADV. Version 1.0.4.
 
 Point the Cardputer at the television. Search walks brands until the set reacts, then hands you the remote. On / Off keeps sending power until you stop.
 
@@ -10,7 +10,7 @@ Cardputer ADV (Stamp-S3A, ESP32-S3, 8 MB flash, no PSRAM). This image is not for
 
 ## M5Burner
 
-Choose `firmware/MetaTVIR-1.0.3.bin`. It is the application image (ESP32 magic `E9`), version **1.0.3**, device **Cardputer ADV**. Sound is off until turned on with Ctrl+M. The remote opens with POWER marked.
+Choose `firmware/MetaTVIR-1.0.4.bin`. It is the application image (ESP32 magic `E9`), version **1.0.4**, device **Cardputer ADV**. Sound is off until turned on with Ctrl+M. The remote opens with POWER marked.
 
 ## Build
 
