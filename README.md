@@ -43,10 +43,10 @@ Point your Cardputer at any unknown TV, sweep through regional brand databases u
 ## Installation (M5Burner)
 
 1. Open **M5Burner** and select **Cardputer ADV**.
-2. Search for **META TV IR** (or load `firmware/MetaTVIR-1.0.4.bin`, application image / ESP32 magic `E9`).
-3. Flash version **1.0.4** to your device.
+2. Search for **META TV IR** (or load `firmware/MetaTVIR-1.0.5.bin`. This is the full flash image, bootloader included, which is what M5Burner writes).
+3. Flash version **1.0.5** to your device. Device: **Cardputer ADV** only.
 
-*(Also compatible with **M5Launcher** via microSD).*
+*(M5Launcher on microSD uses the application image, `firmware/MetaTVIR-1.0.5-app.bin`, not the M5Burner file.)*
 
 ---
 
