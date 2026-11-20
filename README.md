@@ -2,6 +2,8 @@
 
 **Interactive TV Brand Scanner & Universal Infrared Remote for M5Stack Cardputer ADV.**
 
+Current release: [1.0.5](https://github.com/Katiuxa/Meta-TV-IR/releases/tag/v1.0.5).
+
 Point your Cardputer at any unknown TV, sweep through regional brand databases until the screen reacts, lock onto the signal, and take full control—or use continuous brute-force mode to toggle power across nearby sets.
 
 ---
