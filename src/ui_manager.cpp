@@ -3,14 +3,17 @@
 #include <M5Cardputer.h>
 #include <SD.h>
 
+#include <ctype.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
 
+#include "cast_net.h"
 #include "ir_engine.h"
 #include "storage_manager.h"
+#include "wifi_remote.h"
 
 enum Screen : uint8_t {
     SCR_BOOT = 0,
@@ -25,7 +28,11 @@ enum Screen : uint8_t {
     SCR_SD,
     SCR_SIGS,
     SCR_HELP,
+    SCR_NET,
 };
+
+static constexpr int kHomeN = 6;
+static bool net_bare = false;
 
 struct Input {
     bool edge;
@@ -60,6 +67,7 @@ static int last_shot = -1;
 static uint32_t shot_at = 0;
 static int probe = KEY_MUTE;
 static int pad_i = 0;
+static bool pad_ir = false;
 static int blast_sel = 0;
 static int blast_arm = 0;
 static bool blast_on = false;
@@ -231,7 +239,7 @@ static void header(const char* mode) {
     vline(0, 129, a, C_CYAN);
     hline(234, 134, a, C_CYAN);
     vline(239, 129, a, C_CYAN);
-    text_at("META TV IR", 8, 2, C_AMBER, &fonts::Font2);
+    text_at("META TV", 8, 2, C_AMBER, &fonts::Font2);
     if (mode && mode[0]) text_at(mode, 118, 6, C_CYAN, &fonts::Font0);
     char bat[16];
     int level = battery();
@@ -427,6 +435,17 @@ static void draw_home_icon(int id, int cx, int cy, bool big, uint16_t color) {
         int arm = big ? 4 : 2;
         hline(cx - arm, m, arm * 2 + 1, color);
         vline(cx, m - arm, arm * 2 + 1, color);
+    } else if (id == 5) {
+        int base = cy + (big ? 6 : 4);
+        fill_ellipse(cx, base, big ? 2 : 1, big ? 2 : 1, color);
+        for (int arc = 1; arc <= 3; ++arc) {
+            int rad = (big ? 5 : 3) * arc;
+            int step = big ? 7 : 12;
+            for (int d = 200; d <= 340; d += step) {
+                float a = d * 0.0174533f;
+                plot(cx + (int)lroundf(cosf(a) * rad), base + (int)lroundf(sinf(a) * rad), color);
+            }
+        }
     } else {
         int r = big ? 12 : 7;
         draw_ellipse(cx, cy, r, r, color);
@@ -448,32 +467,33 @@ static void draw_home() {
         default: tag = "ALL"; break;
     }
     header(tag);
-    static const char* title[] = {"SEARCH", "ON / OFF", "FAVORITES", "CONTROLS", "HELP"};
-    static const char* sub[] = {"FIND THE SET", "BRUTE FORCE", "SAVED SETS", "BY BRAND", "HOW TO HUNT"};
-    static const char* side[] = {"SEARCH", "ON/OFF", "SAVED", "BRANDS", "HELP"};
-    int prev = (home_sel + 4) % 5;
-    int next = (home_sel + 1) % 5;
+    static const char* title[] = {"NETWORK", "SEARCH", "ON / OFF", "FAVORITES", "CONTROLS", "HELP"};
+    static const char* sub[] = {"TVS IN LOCAL NET", "FIND THE SET", "BRUTE FORCE", "SAVED SETS", "BY BRAND", "HOW TO HUNT"};
+    static const char* side[] = {"NET", "SEARCH", "ON/OFF", "SAVED", "BRANDS", "HELP"};
+    static const int icon[] = {5, 0, 1, 2, 3, 4};
+    int prev = (home_sel + kHomeN - 1) % kHomeN;
+    int next = (home_sel + 1) % kHomeN;
 
     fill_r(4, 36, 46, 70, 4, C_CARD);
     draw_r(4, 36, 46, 70, 4, C_LINE);
-    draw_home_icon(prev, 27, 64, false, C_DIM);
+    draw_home_icon(icon[prev], 27, 64, false, C_DIM);
     text_center(side[prev], 27, 94, C_DIM, &fonts::Font0);
 
     fill_r(190, 36, 46, 70, 4, C_CARD);
     draw_r(190, 36, 46, 70, 4, C_LINE);
-    draw_home_icon(next, 213, 64, false, C_DIM);
+    draw_home_icon(icon[next], 213, 64, false, C_DIM);
     text_center(side[next], 213, 94, C_DIM, &fonts::Font0);
 
     fill_r(54, 24, 132, 92, 5, C_CARD);
     draw_r(54, 24, 132, 92, 5, C_AMBER);
     brackets(58, 28, 124, 84, C_CYAN);
-    uint16_t ink = home_sel == 1 ? C_POWER : C_AMBER;
-    draw_home_icon(home_sel, 120, 50, true, ink);
+    uint16_t ink = home_sel == 2 ? C_POWER : C_AMBER;
+    draw_home_icon(icon[home_sel], 120, 50, true, ink);
     text_center(title[home_sel], 120, 80, C_INK, &fonts::Font2);
     text_center(sub[home_sel], 120, 98, ink, &fonts::Font0);
-    static const char* nums[] = {"1", "2", "3", "4", "5"};
+    static const char* nums[] = {"1", "2", "3", "4", "5", "6"};
     text_at(nums[home_sel], 64, 32, C_CYAN, &fonts::Font0);
-    footer("< > move    OK open    R");
+    footer("< > move   OK   R region");
     paint_end();
 }
 
@@ -824,7 +844,7 @@ static void draw_boot() {
     vline(sx, y + 10, 28, C_AMBER);
     fill_r(x + w / 2 - 8, y + h - 10, 16, 4, 1, C_DIM);
     fill_r(x + w / 2 - 18, y + h - 6, 36, 3, 1, C_LINE);
-    text_center("Meta TV", 120, 112, C_DIM, &fonts::Font0);
+    text_center("1.1.6", 120, 112, C_DIM, &fonts::Font0);
     paint_end();
 }
 
@@ -853,6 +873,51 @@ static void draw_region() {
 }
 
 static const char* kHelp[] = {
+    "NETWORK",
+    "",
+    "On the home menu, R",
+    "changes the region.",
+    "1 or OK opens NETWORK.",
+    "Pick a Wi-Fi and press OK.",
+    "Type the password once.",
+    "Next time it is saved.",
+    "",
+    "The TVs must use that",
+    "same Wi-Fi. The list shows",
+    "name, brand and IP.",
+    "One TV stays in the list.",
+    "OK opens it.",
+    "",
+    "Wi-Fi Remote is a network",
+    "remote. Arrows pick a key.",
+    "OK sends that key by Wi-Fi.",
+    "You do not aim at the TV.",
+    "IR OK is a second button.",
+    "Space sends only that one,",
+    "to accept a prompt.",
+    "Samsung, LG, Sony, Roku,",
+    "Panasonic and Philips.",
+    "",
+    "Rickroll Attack sends the",
+    "test video. YouTube Attack",
+    "is your own list.",
+    "Add link, give it a name.",
+    "Del removes a saved one.",
+    "The screen says Video sent.",
+    "",
+    "IR remote is the other pad.",
+    "G opens it. Those keys are",
+    "infrared, so aim at the TV.",
+    "Brands: LG, Samsung, Sony,",
+    "Philips, Hisense, TCL,",
+    "Panasonic, Toshiba, Sharp,",
+    "Grundig, JVC, Hitachi,",
+    "Sanyo, Telefunken, NEC.",
+    "W picks another network.",
+    "In NETWORK, R searches.",
+    "The bar fills, then it stops.",
+    "It does not call out.",
+    "",
     "HOW TO HUNT UNKNOWN TVs",
     "",
     "1. FILTER BY REGION",
@@ -936,6 +1001,253 @@ static void draw_help() {
     paint_end();
 }
 
+static void draw_bar(int y, int pct) {
+    if (pct < 0) pct = 0;
+    if (pct > 100) pct = 100;
+    fill_r(16, y, 208, 12, 4, C_LINE);
+    int w = pct * 208 / 100;
+    if (pct > 0 && w < 12) w = 12;
+    if (w > 0) fill_r(16, y, w, 12, 4, C_CYAN);
+}
+
+static void draw_search_waves(int phase) {
+    const int x = 120;
+    const int y = 62;
+    fill_ellipse(x, y, 3, 3, C_CYAN);
+    for (int ring = 1; ring <= 3; ++ring) {
+        uint16_t color = ring <= phase ? C_CYAN : C_LINE;
+        int rx = 8 + ring * 16;
+        int ry = 5 + ring * 8;
+        for (int deg = 206; deg <= 334; deg += 7) {
+            float rad = deg * 0.0174533f;
+            plot(x + (int)(cosf(rad) * rx), y + (int)(sinf(rad) * ry), color);
+        }
+    }
+}
+
+static void draw_net_rows(int y0, int row_h, int visible) {
+    int count = cast_count();
+    int sel = cast_sel();
+    if (sel < 0) sel = 0;
+    int start = sel - 1;
+    if (start < 0) start = 0;
+    if (count <= visible) start = 0;
+    else if (start > count - visible) start = count - visible;
+    for (int row = 0; row < visible && start + row < count; ++row) {
+        int i = start + row;
+        int y = y0 + row * row_h;
+        bool on = i == sel;
+        CastRow item;
+        cast_row(i, &item);
+        fill_r(8, y, 224, row_h - 2, 3, C_CARD);
+        draw_r(8, y, 224, row_h - 2, 3, on ? C_AMBER : C_LINE);
+        char num[8];
+        snprintf(num, sizeof(num), "%d", i + 1);
+        text_at(num, 14, y + 4, C_CYAN, &fonts::Font0);
+        text_at(item.title, 28, y + 3, on ? C_AMBER : C_INK, &fonts::Font0);
+        if (item.sub[0]) text_at(item.sub, 28, y + 14, C_DIM, &fonts::Font0);
+        if (item.extra[0]) {
+            int w = (int)strlen(item.extra) * 6;
+            text_at(item.extra, 224 - w, y + (item.sub[0] ? 14 : 4), C_CYAN, &fonts::Font0);
+        }
+    }
+}
+
+static void mark_youtube(int x, int y) {
+    uint16_t red = M5Cardputer.Display.color565(230, 33, 23);
+    fill_r(x, y, 28, 18, 5, red);
+    fill_tri(x + 11, y + 4, x + 11, y + 14, x + 20, y + 9, C_INK);
+}
+
+static void mark_wifi(int x, int y, uint16_t color) {
+    fill_ellipse(x + 14, y + 16, 2, 2, color);
+    for (int ring = 1; ring <= 3; ++ring) {
+        int rx = 3 + ring * 3;
+        int ry = 2 + ring * 2;
+        for (int deg = 206; deg <= 334; deg += 8) {
+            float rad = deg * 0.0174533f;
+            plot(x + 14 + (int)(cosf(rad) * rx), y + 16 + (int)(sinf(rad) * ry), color);
+        }
+    }
+}
+
+static void mark_ir(int x, int y, uint16_t color) {
+    fill_r(x + 2, y + 5, 8, 10, 2, color);
+    line(x + 12, y + 4, x + 22, y + 1, color);
+    line(x + 12, y + 10, x + 24, y + 10, color);
+    line(x + 12, y + 16, x + 22, y + 19, color);
+}
+
+static void draw_tv_actions(int sel) {
+    for (int i = 0; i < 4; ++i) {
+        int col = i % 2;
+        int row = i / 2;
+        int x = 8 + col * 116;
+        int y = 24 + row * 50;
+        const int w = 108;
+        const int h = 46;
+        bool on = i == sel;
+        fill_r(x, y, w, h, 8, on ? C_AMBER : C_LINE);
+        fill_r(x + 2, y + 2, w - 4, h - 4, 6, C_CARD);
+        int mx = x + (w - 28) / 2;
+        if (i == 0) mark_wifi(mx - 2, y + 1, on ? C_CYAN : C_DIM);
+        else if (i == 3) mark_ir(mx, y + 1, on ? C_AMBER : C_DIM);
+        else mark_youtube(mx, y + 2);
+        const char* title = "Wi-Fi";
+        const char* sub = "Remote";
+        uint16_t subc = C_CYAN;
+        if (i == 1) {
+            title = "Rickroll";
+            sub = "Attack";
+            subc = C_POWER;
+        } else if (i == 2) {
+            title = "YouTube";
+            sub = "Custom Attack";
+            subc = C_POWER;
+        } else if (i == 3) {
+            title = "IR";
+            sub = "Remote";
+            subc = C_AMBER;
+        }
+        text_center(title, x + w / 2, y + 28, on ? C_AMBER : C_INK, &fonts::Font0);
+        text_center(sub, x + w / 2, y + 38, subc, &fonts::Font0);
+    }
+}
+
+static void draw_net() {
+    paint_begin();
+    CastView view = cast_view();
+    const char* mode = "WIFI";
+    if (view == CAST_SEEK || view == CAST_LIST || view == CAST_EMPTY) mode = "TVS";
+    if (view == CAST_PAD) mode = "WIFI";
+    if (view == CAST_TV || view == CAST_LINKS || view == CAST_SENT || view == CAST_URL || view == CAST_LABEL) mode = "SEND";
+    header(mode);
+    const char* ssid = cast_ssid();
+    if (!ssid) ssid = "";
+
+    if (view == CAST_NETS) {
+        text_at("Wi-Fi", 8, 24, C_AMBER, &fonts::Font2);
+        if (cast_count() <= 0) {
+            text_center(cast_detail()[0] ? cast_detail() : "Scanning", 120, 72, C_INK, &fonts::Font2);
+            footer("R scan    ` home");
+        } else {
+            const char* hint = cast_detail();
+            if (hint && strstr(hint, "wifi.txt")) text_at(hint, 72, 30, C_POWER, &fonts::Font0);
+            draw_net_rows(44, 26, 3);
+            footer("OK join    R scan    W");
+        }
+    } else if (view == CAST_JOIN) {
+        text_center("Joining", 120, 42, C_AMBER, &fonts::Font2);
+        text_center(ssid[0] ? ssid : "...", 120, 68, C_CYAN, &fonts::Font2);
+        draw_bar(92, cast_progress());
+        footer("W networks");
+    } else if (view == CAST_FAIL) {
+        text_center("Join failed", 120, 42, C_POWER, &fonts::Font2);
+        text_center(ssid, 120, 64, C_INK, &fonts::Font0);
+        text_center(cast_detail()[0] ? cast_detail() : "Try again", 120, 82, C_DIM, &fonts::Font0);
+        footer("OK retry    W back");
+    } else if (view == CAST_SEEK) {
+        int phase = (int)((millis() / 280) % 4);
+        draw_search_waves(phase);
+        int pct = cast_progress();
+        if (pct < 0) pct = 0;
+        const char* cap = cast_detail();
+        text_center(cap && cap[0] ? cap : "Searching", 120, 82, C_INK, &fonts::Font0);
+        draw_bar(96, pct);
+        footer("W networks");
+    } else if (view == CAST_EMPTY) {
+        text_center("No TVs found", 120, 42, C_INK, &fonts::Font2);
+        text_center("Use the same Wi-Fi", 120, 66, C_DIM, &fonts::Font0);
+        text_center("as the television", 120, 80, C_DIM, &fonts::Font0);
+        footer("R search    W Wi-Fi");
+    } else if (view == CAST_LIST) {
+        text_at(cast_detail()[0] ? cast_detail() : "Choose", 8, 24, C_AMBER, &fonts::Font2);
+        draw_net_rows(46, 26, 3);
+        footer("OK open    R again");
+    } else if (view == CAST_TV) {
+        draw_tv_actions(cast_sel());
+        footer("OK open    space IR OK");
+    } else if (view == CAST_LINKS) {
+        text_at("YouTube Attack", 8, 24, C_AMBER, &fonts::Font2);
+        draw_net_rows(46, 26, 3);
+        footer("OK send   Del remove");
+    } else if (view == CAST_PAD) {
+        const char* brand = cast_tv_brand();
+        WifiPhase phase = wifi_remote_phase();
+        bool ready = phase == WIFI_PHASE_READY;
+        text_at(brand && brand[0] ? brand : "TV", 8, 22, C_AMBER, &fonts::Font0);
+        text_at(wifi_remote_status(), 118, 22, ready ? C_CYAN : C_DIM, &fonts::Font0);
+        if (phase == WIFI_PHASE_PIN) {
+            text_at("Pin on the TV", 8, 48, C_INK, &fonts::Font2);
+            char shown[16];
+            snprintf(shown, sizeof(shown), "%s_", wifi_remote_pin());
+            fill_r(8, 72, 160, 22, 4, C_CARD);
+            draw_r(8, 72, 160, 22, 4, C_AMBER);
+            text_at(shown, 16, 76, C_INK, &fonts::Font2);
+            footer("OK send    space IR OK");
+        } else {
+            if (pad_i < 0 || pad_i >= kPadN) pad_i = 0;
+            for (int i = 0; i < kPadN; ++i) {
+                bool on = !pad_ir && i == pad_i;
+                bool power = kPad[i].key == KEY_POWER;
+                const char* label = kPad[i].key == KEY_MENU ? "HOME" : kPad[i].label;
+                if (on && ready) {
+                    fill_r(kPad[i].x, kPad[i].y, kPad[i].w, kPad[i].h, 3, power ? C_POWER : C_AMBER);
+                } else {
+                    fill_r(kPad[i].x, kPad[i].y, kPad[i].w, kPad[i].h, 3, C_CARD);
+                    draw_r(kPad[i].x, kPad[i].y, kPad[i].w, kPad[i].h, 3, on ? C_AMBER : (power ? C_POWER : C_LINE));
+                }
+                uint16_t ink = C_DIM;
+                if (on && ready) ink = C_BG;
+                else if (ready) ink = power ? C_POWER : C_INK;
+                else if (on) ink = C_AMBER;
+                text_center(label, kPad[i].x + kPad[i].w / 2, kPad[i].y + kPad[i].h / 2, ink, &fonts::Font0);
+            }
+            if (pad_ir) fill_r(168, 58, 64, 44, 4, C_POWER);
+            else {
+                fill_r(168, 58, 64, 44, 4, C_CARD);
+                draw_r(168, 58, 64, 44, 4, C_POWER);
+            }
+            text_center("IR OK", 200, 70, pad_ir ? C_BG : C_POWER, &fonts::Font0);
+            text_center("space", 200, 84, pad_ir ? C_BG : C_DIM, &fonts::Font0);
+            footer("OK = Wi-Fi   space = IR");
+        }
+    } else if (view == CAST_KEY || view == CAST_URL || view == CAST_LABEL) {
+        const char* title = "Password";
+        const char* hint = ssid;
+        const char* foot = "OK join    ` back";
+        if (view == CAST_URL) {
+            title = "YouTube link";
+            hint = "Address or video id";
+            foot = "OK next    ` back";
+        } else if (view == CAST_LABEL) {
+            title = "Video name";
+            hint = "Saved on this device";
+            foot = "OK save    ` back";
+        }
+        text_at(title, 8, 28, C_AMBER, &fonts::Font2);
+        if (hint && hint[0]) text_at(hint, 8, 48, C_CYAN, &fonts::Font0);
+        const char* field = cast_field();
+        if (!field) field = "";
+        int n = (int)strlen(field);
+        const char* show = n > 32 ? field + (n - 32) : field;
+        char line[40];
+        snprintf(line, sizeof(line), "%s_", show);
+        fill_r(8, 68, 224, 22, 4, C_CARD);
+        draw_r(8, 68, 224, 22, 4, C_AMBER);
+        text_at(line, 14, 72, C_INK, &fonts::Font0);
+        footer(foot);
+    } else {
+        const char* brand = cast_tv_brand();
+        text_center(brand && brand[0] ? brand : "TV", 120, 40, C_AMBER, &fonts::Font2);
+        text_center(cast_detail()[0] ? cast_detail() : "Sent", 120, 62, C_INK, &fonts::Font0);
+        text_center("If a prompt appears,", 120, 82, C_DIM, &fonts::Font0);
+        text_center("press space", 120, 96, C_CYAN, &fonts::Font0);
+        footer("space = OK on the TV");
+    }
+    paint_end();
+}
+
 static void draw_current() {
     switch (screen) {
         case SCR_BOOT: draw_boot(); break;
@@ -950,6 +1262,7 @@ static void draw_current() {
         case SCR_SD: draw_list("SD", file_n, file_label, nullptr, "OK open   ` back"); break;
         case SCR_SIGS: draw_list("FILE", sig_n, sig_label, sig_sub, "OK test   G save"); break;
         case SCR_HELP: draw_help(); break;
+        case SCR_NET: draw_net(); break;
     }
 }
 
@@ -1306,13 +1619,267 @@ static void handle_power(const Input& in) {
     if (blast_on) blast_step();
 }
 
+static int ir_for_brand(const char* brand) {
+    if (!brand || !brand[0]) return -1;
+    for (int i = 0; i < kBrandCount; ++i) {
+        if (!strcasecmp(kBrands[i].name, brand)) return i;
+    }
+    return -1;
+}
+
+static void enter_net() {
+    cast_enter();
+    blip(1400, 16);
+    go(SCR_NET);
+}
+
+static void leave_net() {
+    cast_leave();
+    if (net_bare) {
+        net_bare = false;
+        canvas_ok = canvas.createSprite(240, 135);
+    }
+    go(SCR_HOME);
+}
+
+static void net_ir_ok() {
+    int index = ir_for_brand(cast_tv_brand());
+    if (index < 0) {
+        set_note("No IR remote");
+        blip(220, 30);
+        return;
+    }
+    ir_send(kBrands[index].key[KEY_OK]);
+    set_note("OK sent");
+    blip(1700, 16);
+}
+
+static void net_open_remote() {
+    int index = ir_for_brand(cast_tv_brand());
+    if (index < 0) {
+        set_note("No IR remote");
+        blip(220, 30);
+        return;
+    }
+    open_catalog(index);
+}
+
+static void send_ir_ok() {
+    int index = ir_for_brand(cast_tv_brand());
+    if (index < 0) {
+        set_note("No IR remote");
+        blip(220, 30);
+        return;
+    }
+    ir_send(kBrands[index].key[KEY_OK]);
+    set_note("IR OK");
+    blip(1700, 12);
+}
+
+static void send_wifi_key(int key, bool quiet) {
+    pad_ir = false;
+    focus_key(key);
+    dirty = true;
+    WifiPhase phase = wifi_remote_phase();
+    if (phase == WIFI_PHASE_READY && wifi_remote_send(key)) {
+        if (!quiet) set_note("Sent");
+        blip(1700, 12);
+        return;
+    }
+    if (!quiet) {
+        if (phase == WIFI_PHASE_WAIT || phase == WIFI_PHASE_ALLOW) set_note("Wait for the TV");
+        else if (phase == WIFI_PHASE_IR) set_note("No Wi-Fi remote");
+        else set_note("No reply");
+    }
+    blip(220, 20);
+}
+
+static bool pad_is_rightmost(int index) {
+    if (index < 0 || index >= kPadN) return false;
+    int row = kPad[index].row;
+    int col = kPad[index].col;
+    for (int i = 0; i < kPadN; ++i) {
+        if (kPad[i].row == row && kPad[i].col > col) return false;
+    }
+    return true;
+}
+
+static void move_wifi_pad(int drow, int dcol) {
+    if (pad_ir) {
+        if (dcol > 0 && drow == 0) return;
+        pad_ir = false;
+        focus_key(KEY_RIGHT);
+        if (dcol < 0) move_focus(0, -1);
+        else if (drow) move_focus(drow, 0);
+        dirty = true;
+        return;
+    }
+    if (dcol > 0 && pad_is_rightmost(pad_i)) {
+        int row = kPad[pad_i].row;
+        if (row >= 1 && row <= 3) {
+            pad_ir = true;
+            dirty = true;
+            return;
+        }
+    }
+    move_focus(drow, dcol);
+}
+
+static void handle_wifi_pad(const Input& in) {
+    if (in.vol_up || in.vol_down) {
+        if (!vol_armed || millis() >= vol_at) {
+            send_wifi_key(in.vol_up ? KEY_VOL_UP : KEY_VOL_DOWN, vol_armed);
+            vol_at = millis() + (vol_armed ? 110 : 280);
+            vol_armed = true;
+        }
+    } else {
+        vol_armed = false;
+    }
+    if (!in.edge) return;
+    if (wifi_remote_phase() == WIFI_PHASE_PIN) {
+        if (in.esc) {
+            cast_back();
+            return;
+        }
+        if (in.space) {
+            send_ir_ok();
+            return;
+        }
+        if (in.del) {
+            wifi_remote_backspace();
+            dirty = true;
+            return;
+        }
+        if (in.enter) {
+            if (wifi_remote_submit_pin()) set_note("Pin sent");
+            else set_note("4 digits");
+            return;
+        }
+        for (int i = 0; i < in.nch; ++i) wifi_remote_type(in.ch[i]);
+        dirty = true;
+        return;
+    }
+    if (in.esc || in.del) {
+        cast_back();
+        return;
+    }
+    if (has_char(in, 'g')) {
+        net_open_remote();
+        return;
+    }
+    if (in.space) {
+        send_ir_ok();
+        return;
+    }
+    if (in.up) move_wifi_pad(-1, 0);
+    else if (in.down) move_wifi_pad(1, 0);
+    else if (in.left) move_wifi_pad(0, -1);
+    else if (in.right) move_wifi_pad(0, 1);
+    else if (in.enter) {
+        if (pad_ir) send_ir_ok();
+        else if (pad_i >= 0 && pad_i < kPadN) send_wifi_key(kPad[pad_i].key, false);
+    } else if (has_char(in, 'p')) send_wifi_key(KEY_POWER, false);
+    else if (has_char(in, 'm')) send_wifi_key(KEY_MUTE, false);
+    else if (has_char(in, 'n')) send_wifi_key(KEY_CH_UP, false);
+    else if (has_char(in, 'b')) send_wifi_key(KEY_CH_DOWN, false);
+    else if (has_char(in, 's')) send_wifi_key(KEY_SOURCE, false);
+    else if (has_char(in, 'h')) send_wifi_key(KEY_MENU, false);
+    else if (has_char(in, 'x')) send_wifi_key(KEY_BACK, false);
+}
+
+static void handle_net(const Input& in) {
+    CastView early = cast_view();
+    if (early == CAST_PAD) {
+        handle_wifi_pad(in);
+        return;
+    }
+    if (cast_typing()) {
+        if (!in.edge) return;
+        if (in.esc) {
+            cast_back();
+            return;
+        }
+        if (in.del) {
+            cast_backspace();
+            return;
+        }
+        if (in.enter) {
+            cast_accept();
+            return;
+        }
+        if (in.space) cast_type(' ');
+        for (int i = 0; i < in.nch; ++i) cast_type(in.ch[i]);
+        return;
+    }
+    if (!in.edge) return;
+    CastView view = cast_view();
+    bool on_set = view == CAST_TV || view == CAST_SENT;
+    if (in.space && on_set) {
+        net_ir_ok();
+        return;
+    }
+    if (has_char(in, 'w') || in.tab) {
+        cast_ask_wifi();
+        return;
+    }
+    if (has_char(in, 'r')) {
+        cast_retry();
+        return;
+    }
+    if (has_char(in, 'g') && (view == CAST_TV || view == CAST_LINKS || view == CAST_LIST || view == CAST_SENT)) {
+        net_open_remote();
+        return;
+    }
+    if (in.del && view == CAST_TV && cast_drop()) return;
+    if (in.esc || in.del) {
+        if (!cast_back()) leave_net();
+        return;
+    }
+    if (view == CAST_TV) {
+        int pick = -1;
+        if (has_char(in, '1')) pick = 0;
+        if (has_char(in, '2')) pick = 1;
+        if (has_char(in, '3')) pick = 2;
+        if (has_char(in, '4')) pick = 3;
+        if (pick >= 0) {
+            cast_choose(pick);
+            if (cast_accept() == CAST_OPEN_IR) net_open_remote();
+            else if (cast_view() == CAST_PAD) {
+                pad_ir = false;
+                focus_key(KEY_OK);
+            }
+            return;
+        }
+    }
+    if (view == CAST_TV && (in.left || in.right || in.up || in.down)) {
+        cast_move_xy(in.right ? 1 : (in.left ? -1 : 0), in.down ? 1 : (in.up ? -1 : 0));
+        return;
+    }
+    if (in.up) {
+        cast_move(-1);
+        return;
+    }
+    if (in.down) {
+        cast_move(1);
+        return;
+    }
+    if (in.enter || (in.space && !on_set)) {
+        CastView before = cast_view();
+        if (cast_accept() == CAST_OPEN_IR) net_open_remote();
+        else if (before != CAST_PAD && cast_view() == CAST_PAD) {
+            pad_ir = false;
+            focus_key(KEY_OK);
+        }
+    }
+}
+
 static void handle_home(const Input& in) {
     if (!in.edge) return;
     if (in.left || in.up) {
-        home_sel = (home_sel + 4) % 5;
+        home_sel = (home_sel + kHomeN - 1) % kHomeN;
         dirty = true;
     } else if (in.right || in.down) {
-        home_sel = (home_sel + 1) % 5;
+        home_sel = (home_sel + 1) % kHomeN;
         dirty = true;
     }
     int pick = -1;
@@ -1328,24 +1895,27 @@ static void handle_home(const Input& in) {
     if (has_char(in, '3')) pick = 2;
     if (has_char(in, '4')) pick = 3;
     if (has_char(in, '5')) pick = 4;
+    if (has_char(in, '6')) pick = 5;
     if (in.enter) pick = home_sel;
     if (pick == 0) {
+        enter_net();
+    } else if (pick == 1) {
         sweep_i = -1;
         last_shot = -1;
         probe = KEY_POWER;
         auto_on = false;
         ensure_sweep();
         go(SCR_SWEEP);
-    } else if (pick == 1) {
+    } else if (pick == 2) {
         blast_on = false;
         blast_i = 0;
         build_blast();
         go(SCR_POWER);
-    } else if (pick == 2) {
-        go(SCR_FAVS);
     } else if (pick == 3) {
-        go(SCR_BRANDS);
+        go(SCR_FAVS);
     } else if (pick == 4) {
+        go(SCR_BRANDS);
+    } else if (pick == 5) {
         help_top = 0;
         screen = SCR_HELP;
         dirty = true;
@@ -1539,6 +2109,7 @@ void ui_loop() {
             }
             break;
         case SCR_HOME: handle_home(in); break;
+        case SCR_NET: handle_net(in); break;
         case SCR_SWEEP: handle_sweep(in); break;
         case SCR_POWER: handle_power(in); break;
         case SCR_REMOTE: handle_remote(in); break;
@@ -1609,6 +2180,30 @@ void ui_loop() {
     if (note[0] && millis() > note_until) {
         note[0] = 0;
         dirty = true;
+    }
+    if (cast_active()) {
+        cast_poll();
+        if (screen == SCR_NET) {
+            if (cast_take_touch()) dirty = true;
+            int pct = cast_progress();
+            static int shown = -1000;
+            static CastView shown_view = CAST_NETS;
+            CastView view = cast_view();
+            if (view != shown_view) {
+                shown_view = view;
+                shown = -1000;
+            }
+            if (view == CAST_SEEK) {
+                static uint32_t waved = 0;
+                if (millis() - waved > 120) {
+                    waved = millis();
+                    dirty = true;
+                }
+            } else if (pct >= 0 && pct / 8 != shown) {
+                shown = pct / 8;
+                dirty = true;
+            }
+        }
     }
     if (screen == SCR_POWER && blast_on) dirty = true;
     if (screen == SCR_SWEEP && (auto_on || (shot_at && millis() - shot_at < 480))) {

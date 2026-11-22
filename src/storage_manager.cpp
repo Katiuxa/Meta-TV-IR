@@ -312,3 +312,5 @@ const char* storage_status() {
     ensure_sd();
     return g_status;
 }
+
+bool storage_sd_ready() { return ensure_sd(); }

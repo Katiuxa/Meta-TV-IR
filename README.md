@@ -1,22 +1,27 @@
-# META TV IR
+# META TV
 
-**Interactive TV Brand Scanner & Universal Infrared Remote for M5Stack Cardputer ADV.**
+**Infrared remote and local Wi-Fi TV control for the M5Stack Cardputer ADV.**
 
-Current release: [1.0.5](https://github.com/Katiuxa/Meta-TV-IR/releases/tag/v1.0.5).
+Current release: [1.1.6](https://github.com/Katiuxa/Meta-TV-IR/releases/tag/v1.1.6).
 
-Point your Cardputer at any unknown TV, sweep through regional brand databases until the screen reacts, lock onto the signal, and take full control—or use continuous brute-force mode to toggle power across nearby sets.
+Point it at an unknown TV and sweep published brand codes until the set reacts, then lock on and drive it. On your own Wi-Fi it also listens for screens that announce themselves, opens YouTube on them, and can drive the ones that speak a network remote. The search shows Wi-Fi waves and a bar that fills, then stops. It does not call out a search, and it does not scan IP addresses.
 
 ---
 
-## Key Features
+## Key features
 
-* **Interactive Brand Search:** Step through brands manually (`<` / `>`) or trigger **Auto-Sweep (`A`)** to rapidly fire IR bursts across popular brands. The moment the TV reacts, press `A` again to freeze the scan and lock onto that brand.
-* **Region Filtering:** Narrow down the brand database by region before scanning to find matching TVs faster.
-* **Stealth Signal Testing (`Tab`):** Cycle the test trigger between `POWER`, `MUTE`, and `VOL+`—allowing you to identify a TV without turning it off.
-* **Instant Full Remote (`G`):** Once locked onto a brand, press `G` to open a complete remote control interface.
-* **Favorites (`S`):** Save detected TVs for quick access later.
-* **ON / OFF Brute-Force Mode:** Continuously spams power signals across brands until you manually stop it.
-* **Silent by Default:** Audio feedback is muted on boot (`Ctrl+M` to toggle sound).
+* **Auto-sweep (`A`):** Cycles brand codes. Press `A` again the moment the TV reacts and the sweep freezes on that brand.
+* **Stealth probe (`Tab`):** Test with `POWER`, `MUTE`, or `VOL+`. Mute and volume find a match without turning the screen off.
+* **Region (`R` on the home menu):** Europe, Asia, Americas, Japan, Oceania, or All, so the sweep is shorter.
+* **Full IR remote (`G`):** Volume, channel, mute, input, and the direction pad for the locked brand.
+* **ON / OFF:** Sends power codes across the brands in the selected region until you stop it.
+* **Wi-Fi search:** Join a network from the device. The password is typed once and remembered on the Cardputer. Waves and a bar run for about five seconds, then the list appears.
+* **Rickroll Attack / YouTube Attack:** Send a test video, or save your own YouTube links with a name and send one to a TV that accepts it.
+* **Wi-Fi Remote:** Arrows pick a key. `OK` sends that key over Wi-Fi. **IR OK** is a separate button (`space`) for an on-screen prompt. You do not aim the Cardputer for the Wi-Fi keys.
+* **Favorites (`S`):** Save a brand from the sweep for later.
+* **Quiet boot:** The buzzer is off until you press `Ctrl+M`.
+
+Wi-Fi keys work with Samsung, LG, Sony, Roku, Panasonic, and Philips. Other sets keep the infrared remote. Codes are published remote codes, not guessed ones.
 
 ---
 
@@ -24,44 +29,49 @@ Point your Cardputer at any unknown TV, sweep through regional brand databases u
 
 | Key | Action |
 | :--- | :--- |
-| `<` / `>` | Previous / Next brand |
-| `OK` | Fire current test signal (`POWER` selected by default) |
-| `A` | Start / Freeze Auto-Sweep |
-| `Tab` | Switch test signal (`POWER` -> `MUTE` -> `VOL+`) |
-| `G` | Open full TV remote for the selected brand |
-| `S` | Save brand to Favorites |
-| `R` | Change Region filter |
-| `Ctrl+M` | Toggle sound on/off |
+| `<` / `>` | Move |
+| `OK` | Open the highlighted item, or send the Wi-Fi key |
+| `space` | Infrared OK only |
+| `A` | Start / freeze auto-sweep |
+| `Tab` | Switch the test signal (`POWER`, `MUTE`, `VOL+`) |
+| `G` | Open the infrared remote |
+| `S` | Save the brand to Favorites |
+| `R` | Region on the home menu. Inside NETWORK, search again |
+| `W` | Pick another Wi-Fi network |
+| Backtick | Back |
+| `Ctrl+M` | Sound on / off |
+
+On a found TV the four buttons are **Wi-Fi Remote**, **Rickroll Attack**, **YouTube Attack**, and **IR remote**.
+
+Inside YouTube Attack: add a link, name it, `OK` sends it, `Del` removes it.
 
 ---
 
-## Hardware Compatibility
+## Hardware
 
-* **Supported:** **M5Stack Cardputer ADV** (Stamp-S3A, ESP32-S3, 8 MB Flash, no PSRAM).
-* **Not Supported:** Original M5Stack Cardputer (v1.0 / v1.1).
+* **Supported:** M5Stack Cardputer ADV (Stamp-S3A, ESP32-S3, 8 MB flash, no PSRAM).
+* **Not supported:** Original Cardputer (v1.0 / v1.1). There is no infrared receiver on the ADV, so this build only transmits.
 
 ---
 
 ## Installation (M5Burner)
 
 1. Open **M5Burner** and select **Cardputer ADV**.
-2. Search for **META TV IR** (or load `firmware/MetaTVIR-1.0.5.bin`. This is the full flash image, bootloader included, which is what M5Burner writes).
-3. Flash version **1.0.5** to your device. Device: **Cardputer ADV** only.
+2. Load `firmware/MetaTVNet-1.1.6.bin`. This is the full flash image, bootloader included, which is what M5Burner writes.
+3. Flash **1.1.6**.
 
-*(M5Launcher on microSD uses the application image, `firmware/MetaTVIR-1.0.5-app.bin`, not the M5Burner file.)*
+Flash settings match the image header: ESP32-S3, 8 MB, QIO, 80 MHz.
+
+`firmware/MetaTVNet-1.1.6-app.bin` is only the application, for M5Launcher on a microSD card. Do not upload that file to M5Burner.
+
+The Wi-Fi password is typed on the device. `wifi.txt` in this repo is an empty optional preload and does not contain a network key.
 
 ---
 
-## Build from Source
-
-Built with **PlatformIO**:
+## Build from source
 
 ```bash
-pio run -e cardputer-adv
+python -m platformio run -e cardputer-adv
 ```
 
-The compiled binary is generated at:
-
-```text
-.pio/build/cardputer-adv/firmware.bin
-```
+The application image is written to `.pio/build/cardputer-adv/firmware.bin`.

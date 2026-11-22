@@ -39,3 +39,4 @@ void storage_set_sound(bool on);
 uint8_t storage_region();
 void storage_set_region(uint8_t region);
 const char* storage_status();
+bool storage_sd_ready();

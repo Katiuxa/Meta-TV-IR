@@ -1,0 +1,4 @@
+# Optional. Leave blank and type the password on the device.
+# Repeat the block to preload another network, then rebuild.
+ssid=
+pass=
