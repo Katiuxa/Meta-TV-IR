@@ -60,6 +60,8 @@ static Act g_act[12];
 static int g_act_n = 0;
 static char g_field[96];
 static char g_draft[96];
+static int g_edit = -1;
+static bool g_confirm = false;
 static bool g_from_links = false;
 static int g_scan_try = 0;
 
@@ -492,6 +494,7 @@ static void fill_links() {
 }
 
 static void open_links() {
+    g_confirm = false;
     fill_links();
     g_sel = 0;
     g_view = CAST_LINKS;
@@ -500,7 +503,7 @@ static void open_links() {
 }
 
 static bool id_chars(const char* s, int n) {
-    if (n < 6 || n > 16) return false;
+    if (n != 11) return false;
     for (int i = 0; i < n; ++i) {
         char c = s[i];
         if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-')) return false;
@@ -510,16 +513,23 @@ static bool id_chars(const char* s, int n) {
 
 static bool youtube_id(const char* url, char* dst, int cap) {
     dst[0] = 0;
-    if (!url || !url[0]) return false;
-    const char* marks[] = {"youtu.be/", "shorts/", "embed/", "live/", "v="};
+    if (!url || !url[0] || cap < 12) return false;
+    char buf[96];
+    int n = 0;
+    for (const char* s = url; *s && n < (int)sizeof(buf) - 1; ++s) {
+        if (*s == ' ' || *s == '\t' || *s == '<' || *s == '>' || *s == '"') continue;
+        buf[n++] = *s;
+    }
+    buf[n] = 0;
+    const char* marks[] = {"youtu.be/", "shorts/", "embed/", "live/", "/v/", "v="};
     const char* p = nullptr;
-    for (int m = 0; m < 5 && !p; ++m) {
-        const char* hit = strstr(url, marks[m]);
+    for (int m = 0; m < 6 && !p; ++m) {
+        const char* hit = strstr(buf, marks[m]);
         if (hit) p = hit + strlen(marks[m]);
     }
-    if (!p) p = url;
+    if (!p) p = buf;
     int i = 0;
-    while (p[i] && p[i] != '&' && p[i] != '?' && p[i] != '/' && i < cap - 1 && i < 16) {
+    while (p[i] && p[i] != '&' && p[i] != '?' && p[i] != '/' && p[i] != '#' && i < 11) {
         dst[i] = p[i];
         ++i;
     }
@@ -903,6 +913,7 @@ void cast_type(char c) {
     if (n >= cap) return;
     g_field[n] = c;
     g_field[n + 1] = 0;
+    if (g_view == CAST_URL) detail("");
     touch();
 }
 
@@ -913,7 +924,43 @@ void cast_backspace() {
     touch();
 }
 
+bool cast_edit() {
+    if (g_view != CAST_LINKS || g_sel < 0 || g_sel >= g_act_n) return false;
+    if (g_act[g_sel].kind != ACT_CLIP) return false;
+    char name[24];
+    char url[96];
+    if (!clip_at(g_act[g_sel].link, name, sizeof(name), url, sizeof(url))) return false;
+    g_edit = g_act[g_sel].link;
+    detail("");
+    copy_cap(g_field, sizeof(g_field), url);
+    copy_cap(g_draft, sizeof(g_draft), url);
+    g_view = CAST_URL;
+    touch();
+    return true;
+}
+
+bool cast_editing() { return g_edit >= 0; }
+
+bool cast_arm_drop() {
+    if (g_view != CAST_LINKS || g_sel < 0 || g_sel >= g_act_n) return false;
+    if (g_act[g_sel].kind != ACT_CLIP) return false;
+    g_confirm = true;
+    detail("Remove this video?");
+    touch();
+    return true;
+}
+
+bool cast_confirming() { return g_confirm && g_view == CAST_LINKS; }
+
+void cast_cancel_drop() {
+    if (!g_confirm) return;
+    g_confirm = false;
+    detail("");
+    touch();
+}
+
 bool cast_drop() {
+    g_confirm = false;
     if (g_view != CAST_LINKS || g_sel < 0 || g_sel >= g_act_n) return false;
     if (g_act[g_sel].kind != ACT_CLIP) return false;
     if (!clip_remove(g_act[g_sel].link)) return false;
@@ -935,10 +982,12 @@ bool cast_back() {
         return true;
     }
     if (g_view == CAST_URL) {
+        g_edit = -1;
         open_links();
         return true;
     }
     if (g_view == CAST_LINKS) {
+        g_confirm = false;
         open_tv(g_chosen);
         g_sel = 2;
         touch();
@@ -1003,26 +1052,39 @@ CastResult cast_accept() {
     }
     if (g_view == CAST_URL) {
         if (!g_field[0]) return CAST_STAY;
+        char id[16];
+        if (!youtube_id(g_field, id, sizeof(id))) {
+            detail("Not a video id");
+            return CAST_STAY;
+        }
         copy_cap(g_draft, sizeof(g_draft), g_field);
         g_field[0] = 0;
+        if (g_edit >= 0) {
+            char name[24];
+            char url[96];
+            if (clip_at(g_edit, name, sizeof(name), url, sizeof(url))) copy_cap(g_field, sizeof(g_field), name);
+        }
         g_view = CAST_LABEL;
         touch();
         return CAST_STAY;
     }
     if (g_view == CAST_LABEL) {
         const char* name = g_field[0] ? g_field : "Video";
-        bool ok = clip_add(name, g_draft);
+        int edited = g_edit;
+        bool ok = edited >= 0 ? clip_set(edited, name, g_draft) : clip_add(name, g_draft);
+        g_edit = -1;
         g_field[0] = 0;
         g_draft[0] = 0;
         if (!ok) {
             open_links();
-            detail("List full");
+            detail(edited >= 0 ? "Not saved" : "List full");
             touch();
             return CAST_STAY;
         }
         open_links();
-        g_sel = clip_count() - 1;
+        g_sel = edited >= 0 ? edited : clip_count() - 1;
         if (g_sel < 0) g_sel = 0;
+        if (g_sel >= g_act_n) g_sel = g_act_n - 1;
         touch();
         return CAST_STAY;
     }
@@ -1074,8 +1136,10 @@ CastResult cast_accept() {
     if (g_view == CAST_LINKS) {
         if (g_sel < 0 || g_sel >= g_act_n) return CAST_STAY;
         if (g_act[g_sel].kind == ACT_ADD) {
+            g_edit = -1;
             g_field[0] = 0;
             g_draft[0] = 0;
+            detail("");
             g_view = CAST_URL;
             touch();
             return CAST_STAY;

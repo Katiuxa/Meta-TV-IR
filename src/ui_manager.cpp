@@ -844,7 +844,7 @@ static void draw_boot() {
     vline(sx, y + 10, 28, C_AMBER);
     fill_r(x + w / 2 - 8, y + h - 10, 16, 4, 1, C_DIM);
     fill_r(x + w / 2 - 18, y + h - 6, 36, 3, 1, C_LINE);
-    text_center("1.1.6", 120, 112, C_DIM, &fonts::Font0);
+    text_center("1.1.10", 120, 112, C_DIM, &fonts::Font0);
     paint_end();
 }
 
@@ -902,7 +902,9 @@ static const char* kHelp[] = {
     "test video. YouTube Attack",
     "is your own list.",
     "Add link, give it a name.",
-    "Del removes a saved one.",
+    "E changes a saved link.",
+    "X asks, then OK removes it.",
+    "` goes back.",
     "The screen says Video sent.",
     "",
     "IR remote is the other pad.",
@@ -929,19 +931,19 @@ static const char* kHelp[] = {
     "",
     "2. SEARCH & LOCK-ON",
     "",
-    "Test signal [Tab]:",
+    "- Test signal [Tab]:",
     "Switch between POWER,",
     "MUTE, or VOL+.",
-    "Tip: use MUTE or VOL+",
+    "Tip: Use MUTE or VOL+",
     "to test a TV without",
     "turning it off.",
     "",
-    "Manual mode [< / >]:",
+    "- Manual mode [< / >]:",
     "Step through brands",
     "one by one. [OK] fires",
     "the signal.",
     "",
-    "Auto sweep [A]:",
+    "- Auto sweep [A]:",
     "Cycles brands for you.",
     "Watch the TV. The second",
     "it reacts, press [A]",
@@ -951,17 +953,17 @@ static const char* kHelp[] = {
     "",
     "3. TAKE CONTROL & SAVE",
     "",
-    "Once locked on, press",
+    "- Once locked on, press",
     "[G] to open the full",
     "TV remote.",
     "",
-    "Press [S] anytime to",
+    "- Press [S] anytime to",
     "save the brand to your",
     "favorites.",
     "",
     "4. ON / OFF (BRUTE FORCE)",
     "",
-    "Pick ON or OFF. [OK]",
+    "- Pick ON or OFF. [OK]",
     "spams power codes across",
     "all brands, nonstop.",
     "Press [OK] again to",
@@ -1168,9 +1170,10 @@ static void draw_net() {
         draw_tv_actions(cast_sel());
         footer("OK open    space IR OK");
     } else if (view == CAST_LINKS) {
-        text_at("YouTube Attack", 8, 24, C_AMBER, &fonts::Font2);
+        if (cast_confirming()) text_at("Remove it?", 8, 24, C_POWER, &fonts::Font2);
+        else text_at("YouTube Attack", 8, 24, C_AMBER, &fonts::Font2);
         draw_net_rows(46, 26, 3);
-        footer("OK send   Del remove");
+        footer(cast_confirming() ? "OK remove   ` cancel" : "OK send   X del   E edit");
     } else if (view == CAST_PAD) {
         const char* brand = cast_tv_brand();
         WifiPhase phase = wifi_remote_phase();
@@ -1217,7 +1220,7 @@ static void draw_net() {
         const char* hint = ssid;
         const char* foot = "OK join    ` back";
         if (view == CAST_URL) {
-            title = "YouTube link";
+            title = cast_editing() ? "Change link" : "YouTube link";
             hint = "Address or video id";
             foot = "OK next    ` back";
         } else if (view == CAST_LABEL) {
@@ -1236,6 +1239,11 @@ static void draw_net() {
         fill_r(8, 68, 224, 22, 4, C_CARD);
         draw_r(8, 68, 224, 22, 4, C_AMBER);
         text_at(line, 14, 72, C_INK, &fonts::Font0);
+        if (view == CAST_URL) {
+            const char* err = cast_detail();
+            if (err && !strcmp(err, "Not a video id")) text_at(err, 8, 100, C_POWER, &fonts::Font0);
+            else text_at("example: dQw4w9WgXcQ", 8, 100, C_DIM, &fonts::Font0);
+        }
         footer(foot);
     } else {
         const char* brand = cast_tv_brand();
@@ -1830,7 +1838,22 @@ static void handle_net(const Input& in) {
         net_open_remote();
         return;
     }
-    if (in.del && view == CAST_TV && cast_drop()) return;
+    if (view == CAST_LINKS && cast_confirming()) {
+        if (in.enter) {
+            cast_drop();
+            return;
+        }
+        cast_cancel_drop();
+        if (!(in.up || in.down)) return;
+    }
+    if (view == CAST_LINKS && has_char(in, 'x')) {
+        cast_arm_drop();
+        return;
+    }
+    if (view == CAST_LINKS && has_char(in, 'e')) {
+        cast_edit();
+        return;
+    }
     if (in.esc || in.del) {
         if (!cast_back()) leave_net();
         return;

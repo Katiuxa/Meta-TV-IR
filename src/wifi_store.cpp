@@ -202,6 +202,16 @@ bool clip_add(const char* name, const char* url) {
     return true;
 }
 
+bool clip_set(int index, const char* name, const char* url) {
+    clip_read();
+    if (index < 0 || index >= g_clip_n || !url || !url[0]) return false;
+    if (!name || !name[0]) name = "Video";
+    copy_cap(g_clip[index].name, sizeof(g_clip[index].name), name);
+    copy_cap(g_clip[index].url, sizeof(g_clip[index].url), url);
+    clip_write();
+    return true;
+}
+
 bool clip_remove(int index) {
     clip_read();
     if (index < 0 || index >= g_clip_n) return false;
