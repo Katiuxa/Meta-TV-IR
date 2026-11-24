@@ -64,7 +64,7 @@ Flash settings match the image header: ESP32-S3, 8 MB, QIO, 80 MHz.
 
 `firmware/MetaTVNet-1.1.10-app.bin` is only the application, for M5Launcher on a microSD card. Do not upload that file to M5Burner.
 
-The same image is listed on [M5 Partner](https://burner.m5stack.com/G3FGBG).
+The same image is listed on [M5Burner](https://burner.m5stack.com/G3FGBG).
 
 The Wi-Fi password is typed on the device. `wifi.txt` in this repo is an empty optional preload and does not contain a network key.
 
